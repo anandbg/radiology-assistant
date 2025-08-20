@@ -329,22 +329,50 @@ class RadiologyAssistant {
       await this.createNewChat();
     }
 
+    // Step 1: PII Detection
+    if (text) {
+      const piiResult = await this.checkPII(text);
+      if (piiResult && piiResult.detected && piiResult.high_risk) {
+        this.showPIIWarning(piiResult.entities);
+        return;
+      }
+    }
+
     // Show loading
     this.showLoading();
     
     try {
+      let transcript_text = null;
+      
+      // Step 2: Transcribe audio if recorded
+      if (this.recordedChunks.length > 0) {
+        transcript_text = await this.transcribeAudio();
+      }
+
       const messageData = {
         text: text,
+        transcript_text: transcript_text,
         template_id: this.selectedTemplate?.id,
-        attachments: [] // TODO: Handle file attachments
+        attachments: this.uploadedFiles || []
       };
-
-      // TODO: Add audio transcription if recorded
       
       const response = await axios.post(`/api/chats/${this.currentChatId}/messages`, messageData);
       
-      // Clear input
+      // Handle PII detection error
+      if (response.data.error === 'PII_DETECTED') {
+        this.showPIIWarning(response.data.detected_entities);
+        return;
+      }
+      
+      // Clear input and reset state
       input.value = '';
+      this.recordedChunks = [];
+      this.uploadedFiles = [];
+      
+      // Show usage info
+      if (response.data.usage) {
+        this.showUsageInfo(response.data.usage);
+      }
       
       // Reload messages
       await this.loadChat(this.currentChatId);
@@ -353,7 +381,62 @@ class RadiologyAssistant {
       await this.loadUsage();
     } catch (error) {
       console.error('Error sending message:', error);
-      this.showError('Failed to send message');
+      if (error.response?.data?.error === 'PII_DETECTED') {
+        this.showPIIWarning(error.response.data.detected_entities);
+      } else {
+        this.showError('Failed to send message');
+      }
+    }
+  }
+
+  async checkPII(text) {
+    try {
+      const response = await axios.post('/api/pii/detect', { text });
+      return response.data;
+    } catch (error) {
+      console.error('Error checking PII:', error);
+      return null;
+    }
+  }
+
+  async transcribeAudio() {
+    if (this.recordedChunks.length === 0) return null;
+    
+    try {
+      const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
+      const formData = new FormData();
+      formData.append('audio', blob, 'recording.webm');
+      
+      const response = await axios.post('/api/transcribe', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      return response.data.transcript;
+    } catch (error) {
+      console.error('Error transcribing audio:', error);
+      return null;
+    }
+  }
+
+  showPIIWarning(entities) {
+    const warning = document.getElementById('pii-warning');
+    if (warning) {
+      const entityTypes = [...new Set(entities.map(e => e.type))].join(', ');
+      warning.querySelector('.pii-warning-text').textContent = 
+        `Detected: ${entityTypes}. Please remove sensitive information before sending.`;
+      warning.classList.remove('hidden');
+      
+      // Hide after 10 seconds
+      setTimeout(() => {
+        warning.classList.add('hidden');
+      }, 10000);
+    }
+  }
+
+  showUsageInfo(usage) {
+    // Simple usage notification
+    if (usage.credits_charged > 0) {
+      console.log(`Credits used: ${usage.credits_charged}, Tokens: ${usage.tokens_used}`);
     }
   }
 
@@ -421,10 +504,90 @@ class RadiologyAssistant {
     }
   }
 
-  handleFileUpload(files) {
-    // TODO: Implement file upload with PII detection
-    console.log('Files selected:', files);
-    this.showError('File upload not yet implemented');
+  async handleFileUpload(files) {
+    if (!files || files.length === 0) return;
+    
+    this.uploadedFiles = this.uploadedFiles || [];
+    
+    for (let file of Array.from(files)) {
+      try {
+        // Validate file
+        if (file.size > 50 * 1024 * 1024) { // 50MB limit
+          this.showError(`File ${file.name} exceeds 50MB limit`);
+          continue;
+        }
+
+        // Show upload progress
+        this.showUploadProgress(file.name);
+        
+        // Upload file
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await axios.post('/api/files/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        
+        // Add to uploaded files
+        this.uploadedFiles.push(response.data.attachment);
+        
+        // Update UI
+        this.updateFileList();
+        this.showSuccess(`Uploaded ${file.name}`);
+        
+      } catch (error) {
+        console.error('Upload error:', error);
+        this.showError(`Failed to upload ${file.name}`);
+      }
+    }
+  }
+
+  showUploadProgress(filename) {
+    // Simple progress indicator
+    const container = document.querySelector('.file-upload-area');
+    container.innerHTML = `
+      <i class="fas fa-spinner fa-spin text-blue-500 text-xl mb-2"></i>
+      <p class="text-blue-600 text-sm">Uploading ${filename}...</p>
+    `;
+  }
+
+  updateFileList() {
+    const container = document.querySelector('.file-upload-area');
+    
+    if (this.uploadedFiles.length === 0) {
+      container.innerHTML = `
+        <i class="fas fa-upload text-gray-400 text-xl mb-2"></i>
+        <p class="text-gray-600 text-sm">Click or drag files here (PDF, DOCX, Images)</p>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="space-y-2">
+        ${this.uploadedFiles.map((file, index) => `
+          <div class="flex items-center justify-between bg-green-50 border border-green-200 rounded p-2">
+            <div class="flex items-center space-x-2">
+              <i class="fas fa-file text-green-600"></i>
+              <span class="text-sm text-green-700">${file.name}</span>
+            </div>
+            <button onclick="radiologyApp.removeFile(${index})" class="text-red-500 hover:text-red-700">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        `).join('')}
+        <div class="text-center mt-2">
+          <button onclick="document.getElementById('file-input').click()" 
+                  class="text-blue-600 hover:text-blue-800 text-sm">
+            + Add more files
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  removeFile(index) {
+    this.uploadedFiles.splice(index, 1);
+    this.updateFileList();
   }
 
   async loadUsage() {
@@ -492,9 +655,47 @@ class RadiologyAssistant {
   }
 
   showError(message) {
-    // Simple error notification - could be enhanced with a toast system
-    console.error(message);
-    alert(message);
+    this.showNotification(message, 'error');
+  }
+
+  showSuccess(message) {
+    this.showNotification(message, 'success');
+  }
+
+  showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 max-w-sm p-4 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
+    
+    const colors = {
+      error: 'bg-red-500 text-white',
+      success: 'bg-green-500 text-white',
+      info: 'bg-blue-500 text-white',
+      warning: 'bg-yellow-500 text-black'
+    };
+    
+    notification.className += ` ${colors[type]}`;
+    notification.innerHTML = `
+      <div class="flex items-center space-x-2">
+        <i class="fas fa-${type === 'error' ? 'exclamation-circle' : type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+        <span>${message}</span>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+      notification.classList.remove('translate-x-full');
+    }, 100);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      notification.classList.add('translate-x-full');
+      setTimeout(() => {
+        document.body.removeChild(notification);
+      }, 300);
+    }, 5000);
   }
 }
 

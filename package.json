@@ -19,18 +19,25 @@
     "db:reset": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate:local && npm run db:seed",
     "db:console:local": "wrangler d1 execute webapp-production --local",
     "db:console:prod": "wrangler d1 execute webapp-production",
+    "r2:create": "wrangler r2 bucket create radiology-assistant-files",
+    "r2:list": "wrangler r2 bucket list",
     "git:init": "git init && git add . && git commit -m 'Initial commit'",
     "git:commit": "git add . && git commit -m",
     "git:status": "git status",
     "git:log": "git log --oneline"
   },
   "dependencies": {
-    "hono": "^4.9.2"
+    "@supabase/supabase-js": "^2.55.0",
+    "hono": "^4.9.2",
+    "openai": "^5.13.1",
+    "stripe": "^18.4.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250820.0",
     "@hono/vite-build": "^1.2.0",
     "@hono/vite-dev-server": "^0.18.2",
+    "@types/uuid": "^10.0.0",
     "typescript": "^5.9.2",
     "vite": "^6.3.5",
     "wrangler": "^4.4.0"
