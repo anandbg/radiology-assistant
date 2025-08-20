@@ -152,7 +152,12 @@ app.post('/api/chats/:id/messages', async (c) => {
     const userResult = await DB.prepare(`
       INSERT INTO messages (chat_id, user_id, role, text, transcript_text, attachments_json, created_at) 
       VALUES (?, 1, 'user', ?, ?, ?, CURRENT_TIMESTAMP)
-    `).bind(chatId, text, transcript_text, JSON.stringify(attachments || [])).run();
+    `).bind(
+      chatId, 
+      text || null, 
+      transcript_text || null, 
+      JSON.stringify(attachments || [])
+    ).run();
 
     // TODO: Implement PII detection here
     
