@@ -1,0 +1,122 @@
+/* Custom styles for Radiology Assistant */
+
+/* Chat interface styles */
+.chat-container {
+  height: calc(100vh - 200px);
+}
+
+.chat-messages {
+  height: calc(100% - 120px);
+  overflow-y: auto;
+}
+
+.chat-input {
+  height: 120px;
+}
+
+/* Message bubbles */
+.message-user {
+  @apply bg-blue-500 text-white rounded-lg p-3 ml-8 mb-4;
+}
+
+.message-assistant {
+  @apply bg-white border rounded-lg p-4 mr-8 mb-4 shadow-sm;
+}
+
+/* File upload styles */
+.file-upload-area {
+  @apply border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer;
+}
+
+.file-upload-area.dragover {
+  @apply border-blue-500 bg-blue-50;
+}
+
+/* Recording button styles */
+.record-button {
+  @apply w-16 h-16 rounded-full flex items-center justify-center text-white transition-all duration-200;
+}
+
+.record-button.idle {
+  @apply bg-gray-500 hover:bg-gray-600;
+}
+
+.record-button.recording {
+  @apply bg-red-500 animate-pulse;
+}
+
+/* Template selection styles */
+.template-card {
+  @apply border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md;
+}
+
+.template-card.selected {
+  @apply border-blue-500 bg-blue-50;
+}
+
+/* PII warning styles */
+.pii-warning {
+  @apply bg-red-50 border border-red-200 rounded-lg p-4 mb-4;
+}
+
+.pii-warning-text {
+  @apply text-red-700 text-sm;
+}
+
+/* Usage indicator styles */
+.usage-bar {
+  @apply w-full bg-gray-200 rounded-full h-2;
+}
+
+.usage-progress {
+  @apply bg-blue-600 h-2 rounded-full transition-all duration-300;
+}
+
+/* Report output styles */
+.report-output {
+  @apply bg-white border rounded-lg p-6 shadow-sm;
+}
+
+.report-json {
+  @apply bg-gray-50 border rounded p-4 font-mono text-sm;
+}
+
+/* Loading states */
+.loading-spinner {
+  @apply animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500;
+}
+
+.skeleton-text {
+  @apply bg-gray-200 rounded h-4 animate-pulse;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .chat-container {
+    height: calc(100vh - 160px);
+  }
+  
+  .message-user,
+  .message-assistant {
+    @apply mx-2;
+  }
+}
+
+/* Custom scrollbar */
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
