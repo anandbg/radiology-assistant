@@ -296,8 +296,8 @@ app.post('/api/chats/:id/messages/precision', async (c) => {
     console.log('🔍 Temperature: 0.05, Top-P: 0.85, Frequency Penalty: 0.2')
     
     // Process with same logic as main endpoint but with forced high-precision
-    const result = await processMessageRequest(c, request, chatId, true) // Force precision mode
-    return result
+    return c.json({ error: 'High precision mode temporarily disabled' }, 501)
+
     
   } catch (error) {
     console.error('❌ Error in high-precision endpoint:', error)
