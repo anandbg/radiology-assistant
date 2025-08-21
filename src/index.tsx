@@ -182,7 +182,7 @@ app.post('/api/chats/:id/messages', async (c) => {
   const chatId = c.req.param('id');
   
   try {
-    const { text, transcript_text, attachments, template_id } = await c.req.json();
+    const { text, transcript_text, whisper_transcript, attachments, template_id } = await c.req.json();
     
     // Get services from context
     const piiDetection = c.get('piiDetection')
@@ -190,8 +190,10 @@ app.post('/api/chats/:id/messages', async (c) => {
     const llmService = c.get('llmService')
     const hybridEnabled = c.get('hybrid_enabled')
     
-    // Step 1: PII Detection
-    const inputText = text || transcript_text || ''
+    // Step 1: PII Detection - use the best available text
+    // Priority: whisper_transcript (most accurate) > text (local + manual) > transcript_text (legacy)
+    const inputText = whisper_transcript || text || transcript_text || ''
+    const localTranscript = text || transcript_text || '' // Keep local for comparison
     const piiResult = piiDetection.detectPII(inputText)
     
     if (piiResult.detected && piiDetection.isHighRiskPII(piiResult.entities)) {
@@ -214,14 +216,18 @@ app.post('/api/chats/:id/messages', async (c) => {
       return c.json({ error: 'Template not found' }, 404);
     }
 
-    // Step 3: Insert user message with PII status
+    // Step 3: Insert user message with PII status and both transcripts
     const userResult = await DB.prepare(`
       INSERT INTO messages (chat_id, user_id, role, text, transcript_text, attachments_json, pii_detected, pii_details, created_at) 
       VALUES (?, 1, 'user', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `).bind(
       chatId, 
-      piiResult.sanitized_text || text || null, 
-      transcript_text || null, 
+      piiResult.sanitized_text || inputText || null, 
+      JSON.stringify({
+        local_transcript: localTranscript,
+        whisper_transcript: whisper_transcript,
+        combined_text: piiResult.sanitized_text || inputText
+      }), 
       JSON.stringify(attachments || []),
       piiResult.detected ? 1 : 0,
       piiResult.detected ? JSON.stringify(piiDetection.getPIISummary(piiResult)) : null
@@ -423,6 +429,178 @@ app.post('/api/transcribe', async (c) => {
 })
 
 // PII detection endpoint (works locally)
+// Test route for speech recognition
+app.get('/test-speech', (c) => {
+  return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Recognition Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        button { padding: 15px 25px; margin: 10px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; }
+        .start { background: #4CAF50; color: white; }
+        .stop { background: #f44336; color: white; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #status { padding: 10px; margin: 10px 0; background: #e7e7e7; border-radius: 5px; font-weight: bold; }
+        #output { border: 2px solid #ddd; padding: 15px; min-height: 150px; margin: 10px 0; background: #fafafa; border-radius: 5px; font-family: monospace; }
+        .transcript-final { color: #2e7d32; font-weight: bold; }
+        .transcript-interim { color: #1976d2; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Speech Recognition Test</h1>
+        <p>This tests if speech recognition works in your browser. Click Start and speak clearly.</p>
+        
+        <button id="startBtn" class="start">🎤 Start Recording</button>
+        <button id="stopBtn" class="stop" disabled>⏹️ Stop Recording</button>
+        
+        <div id="status">Ready - Click start to begin</div>
+        <div id="output">Transcription will appear here...</div>
+        
+        <div style="margin-top: 20px; padding: 10px; background: #fff3cd; border-radius: 5px;">
+            <strong>Tips:</strong>
+            <ul>
+                <li>Allow microphone permission when prompted</li>
+                <li>Speak clearly and at normal volume</li>
+                <li>Works best in Chrome, Edge, or Safari</li>
+                <li>Requires internet connection</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        let recognition;
+        let isRecording = false;
+        let finalTranscript = '';
+        
+        function startRecording() {
+            console.log('🎤 Starting speech recognition test...');
+            
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                console.log('❌ Speech recognition not supported');
+                document.getElementById('status').textContent = '❌ Speech recognition not supported in this browser';
+                document.getElementById('status').style.background = '#ffebee';
+                return;
+            }
+            
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+            
+            finalTranscript = '';
+            
+            recognition.onstart = () => {
+                console.log('✅ Speech recognition started!');
+                document.getElementById('status').textContent = '🎤 Listening... Speak now!';
+                document.getElementById('status').style.background = '#c8e6c9';
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                isRecording = true;
+            };
+            
+            recognition.onresult = (event) => {
+                console.log('🔊 Got speech result:', event.results.length);
+                let interimTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    const confidence = event.results[i][0].confidence;
+                    console.log('📝 Transcript:', transcript, event.results[i].isFinal ? '(final)' : '(interim)', 'confidence:', confidence);
+                    
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + ' ';
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+                
+                const output = document.getElementById('output');
+                output.innerHTML = \`<div class="transcript-final"><strong>Final:</strong> \${finalTranscript}</div><div class="transcript-interim"><em>Current:</em> \${interimTranscript}</div>\`;
+                
+                // Update status
+                if (finalTranscript || interimTranscript) {
+                    document.getElementById('status').textContent = '🔊 Speech detected - keep talking!';
+                }
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('🚨 Speech recognition error:', event.error);
+                document.getElementById('status').textContent = \`❌ Error: \${event.error}\`;
+                document.getElementById('status').style.background = '#ffebee';
+                
+                if (event.error === 'not-allowed') {
+                    document.getElementById('output').innerHTML = '❌ <strong>Microphone permission denied.</strong><br>Please allow microphone access and try again.';
+                } else if (event.error === 'no-speech') {
+                    console.log('No speech detected, will restart...');
+                } else if (event.error === 'network') {
+                    document.getElementById('output').innerHTML = '❌ <strong>Network error.</strong><br>Speech recognition requires internet connection.';
+                }
+            };
+            
+            recognition.onend = () => {
+                console.log('🛑 Speech recognition ended');
+                if (isRecording) {
+                    console.log('Auto-restarting...');
+                    setTimeout(() => {
+                        if (isRecording) {
+                            try {
+                                recognition.start();
+                            } catch (e) {
+                                console.error('Failed to restart:', e);
+                            }
+                        }
+                    }, 100);
+                }
+            };
+            
+            try {
+                recognition.start();
+                console.log('🚀 Recognition start() called');
+            } catch (error) {
+                console.error('❌ Failed to start:', error);
+                document.getElementById('status').textContent = \`❌ Failed to start: \${error.message}\`;
+                document.getElementById('status').style.background = '#ffebee';
+            }
+        }
+        
+        function stopRecording() {
+            if (recognition) {
+                isRecording = false;
+                recognition.stop();
+                document.getElementById('status').textContent = '⏹️ Recording stopped';
+                document.getElementById('status').style.background = '#e7e7e7';
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                console.log('⏹️ Recording stopped');
+            }
+        }
+        
+        document.getElementById('startBtn').onclick = startRecording;
+        document.getElementById('stopBtn').onclick = stopRecording;
+        
+        // Log browser info
+        console.log('Test page loaded.');
+        console.log('Browser:', navigator.userAgent);
+        console.log('Speech recognition available:', 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+        
+        // Show browser compatibility
+        const hasWebSpeech = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+        if (!hasWebSpeech) {
+            document.getElementById('output').innerHTML = '❌ <strong>Speech recognition not supported</strong><br>Try using Chrome, Edge, or Safari.';
+            document.getElementById('startBtn').disabled = true;
+        }
+    </script>
+</body>
+</html>`)
+})
+
 app.post('/api/pii/detect', async (c) => {
   try {
     const piiDetection = c.get('piiDetection')

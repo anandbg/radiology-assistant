@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Recognition Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        #output { border: 1px solid #ccc; padding: 10px; min-height: 100px; margin: 10px 0; }
+        .recording { background-color: red; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Speech Recognition Test</h1>
+    <button id="startBtn">Start Recording</button>
+    <button id="stopBtn" disabled>Stop Recording</button>
+    <div id="status">Ready</div>
+    <div id="output"></div>
+    
+    <script>
+        let recognition;
+        let isRecording = false;
+        let finalTranscript = '';
+        
+        function startRecording() {
+            console.log('🎤 Starting speech recognition test...');
+            
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                console.log('❌ Speech recognition not supported');
+                document.getElementById('status').textContent = 'Speech recognition not supported';
+                return;
+            }
+            
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+            
+            finalTranscript = '';
+            
+            recognition.onstart = () => {
+                console.log('✅ Speech recognition started!');
+                document.getElementById('status').textContent = 'Listening... Speak now!';
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                isRecording = true;
+            };
+            
+            recognition.onresult = (event) => {
+                console.log('🔊 Got speech result:', event.results.length);
+                let interimTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    console.log('📝 Transcript:', transcript, event.results[i].isFinal ? '(final)' : '(interim)');
+                    
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + ' ';
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+                
+                const output = document.getElementById('output');
+                output.innerHTML = `<strong>Final:</strong> ${finalTranscript}<br><em>Interim:</em> ${interimTranscript}`;
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('🚨 Speech recognition error:', event.error);
+                document.getElementById('status').textContent = `Error: ${event.error}`;
+                if (event.error === 'no-speech') {
+                    console.log('No speech detected, will restart...');
+                }
+            };
+            
+            recognition.onend = () => {
+                console.log('🛑 Speech recognition ended');
+                if (isRecording) {
+                    console.log('Auto-restarting...');
+                    setTimeout(() => {
+                        if (isRecording) {
+                            recognition.start();
+                        }
+                    }, 100);
+                }
+            };
+            
+            try {
+                recognition.start();
+                console.log('🚀 Recognition start() called');
+            } catch (error) {
+                console.error('❌ Failed to start:', error);
+                document.getElementById('status').textContent = `Failed to start: ${error.message}`;
+            }
+        }
+        
+        function stopRecording() {
+            if (recognition) {
+                isRecording = false;
+                recognition.stop();
+                document.getElementById('status').textContent = 'Stopped';
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                console.log('⏹️ Recording stopped');
+            }
+        }
+        
+        document.getElementById('startBtn').onclick = startRecording;
+        document.getElementById('stopBtn').onclick = stopRecording;
+        
+        console.log('Test page loaded. Browser:', navigator.userAgent);
+        console.log('Speech recognition available:', 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+    </script>
+</body>
+</html>
