@@ -10,6 +10,7 @@ import { VectorDBService } from './services/vector-db'
 import { LLMService } from './services/llm'
 import { PIIDetectionService } from './services/pii-detection'
 import { FileStorageService } from './services/file-storage'
+import { SupabaseStorageService } from './services/supabase-storage'
 import type { Bindings, HybridContext } from './types'
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -44,8 +45,10 @@ app.use('*', async (c, next) => {
   // PII detection works locally without external services
   const piiDetection = PIIDetectionService.getInstance()
   
-  // File storage needs R2 bucket
-  if (c.env.BUCKET) {
+  // File storage: Use Supabase Storage if available, fallback to R2
+  if (supabase) {
+    fileStorage = new SupabaseStorageService(supabase.client)
+  } else if (c.env.BUCKET) {
     fileStorage = new FileStorageService(c.env.BUCKET, c.env)
   }
   
@@ -519,7 +522,7 @@ app.post('/api/chats/:id/messages', async (c) => {
   }
 })
 
-// File upload endpoint
+// File upload endpoint (handles both audio and document files)
 app.post('/api/files/upload', async (c) => {
   try {
     const fileStorage = c.get('fileStorage')
@@ -530,10 +533,29 @@ app.post('/api/files/upload', async (c) => {
       return c.json({ error: 'No file provided' }, 400)
     }
 
-    const result = await fileStorage.uploadFile(file, 1, 1, {
-      filename: file.name,
-      contentType: file.type
-    })
+    if (!fileStorage) {
+      return c.json({ error: 'File storage not configured' }, 503)
+    }
+
+    // Check if it's an audio file and use appropriate method
+    const isAudioFile = file.type.startsWith('audio/')
+    let result
+
+    if (isAudioFile && 'uploadAudioFile' in fileStorage) {
+      // Use Supabase Storage for audio files
+      result = await fileStorage.uploadAudioFile(file, 1, 1, {
+        filename: file.name,
+        contentType: file.type
+      })
+    } else if ('uploadFile' in fileStorage) {
+      // Use R2 or fallback storage for other files
+      result = await fileStorage.uploadFile(file, 1, 1, {
+        filename: file.name,
+        contentType: file.type
+      })
+    } else {
+      return c.json({ error: 'File upload method not available' }, 503)
+    }
 
     if (!result.success) {
       return c.json({ error: result.error }, 400)
@@ -543,7 +565,8 @@ app.post('/api/files/upload', async (c) => {
       file_key: result.file_key,
       url: result.url,
       attachment: result.attachment,
-      credits_charged: result.usage_event?.credits_charged
+      credits_charged: result.usage_event?.credits_charged,
+      storage_type: isAudioFile ? 'supabase' : 'r2'
     })
   } catch (error) {
     console.error('Error uploading file:', error)
@@ -557,16 +580,38 @@ app.get('/api/files/:key{.*}', async (c) => {
     const fileStorage = c.get('fileStorage')
     const fileKey = c.req.param('key')
     
-    const result = await fileStorage.getFile(fileKey, 1) // orgId = 1 for demo
+    if (!fileStorage) {
+      return c.json({ error: 'File storage not configured' }, 503)
+    }
+
+    let result
+    
+    // Try audio file method first (Supabase Storage)
+    if ('getAudioFile' in fileStorage) {
+      result = await fileStorage.getAudioFile(fileKey, 1)
+      
+      // If not found as audio file, try general file method
+      if (!result.success && 'getFile' in fileStorage) {
+        result = await fileStorage.getFile(fileKey, 1)
+      }
+    } else if ('getFile' in fileStorage) {
+      result = await fileStorage.getFile(fileKey, 1)
+    } else {
+      return c.json({ error: 'File download method not available' }, 503)
+    }
     
     if (!result.success) {
       return c.json({ error: result.error }, 404)
     }
 
-    return new Response(result.data, {
+    // Handle both ArrayBuffer (R2) and Blob (Supabase) data types
+    const responseData = result.data instanceof ArrayBuffer ? result.data : await result.data.arrayBuffer()
+    const filename = result.metadata?.['original-filename'] || result.metadata?.originalFilename || 'file'
+
+    return new Response(responseData, {
       headers: {
         'Content-Type': result.contentType || 'application/octet-stream',
-        'Content-Disposition': `inline; filename="${result.metadata?.['original-filename'] || 'file'}"`
+        'Content-Disposition': `inline; filename="${filename}"`
       }
     })
   } catch (error) {
