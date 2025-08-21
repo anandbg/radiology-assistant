@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Chat Click</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
+</head>
+<body class="p-8">
+    <h1 class="text-2xl font-bold mb-4">Debug Chat Click</h1>
+    
+    <div class="space-y-4">
+        <button onclick="testChatAPI()" class="bg-blue-500 text-white px-4 py-2 rounded">
+            Test Chat #2 API (Has Messages)
+        </button>
+        
+        <button onclick="testChatEmpty()" class="bg-gray-500 text-white px-4 py-2 rounded">
+            Test Chat #5 API (No Assistant Response)
+        </button>
+        
+        <div id="results" class="mt-4 p-4 bg-gray-100 rounded"></div>
+    </div>
+
+    <script>
+        async function testChatAPI() {
+            try {
+                const response = await axios.get('/api/chats/2/messages');
+                document.getElementById('results').innerHTML = `
+                    <h3 class="font-bold">Chat #2 Messages (${response.data.messages.length} messages):</h3>
+                    <div class="space-y-2 mt-2">
+                        ${response.data.messages.map(msg => `
+                            <div class="border p-2 rounded ${msg.role === 'assistant' ? 'bg-blue-50' : 'bg-green-50'}">
+                                <strong>${msg.role}:</strong> 
+                                ${msg.text || (msg.rendered_md ? 'Has rendered report' : 'No text')}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('results').innerHTML = `<p class="text-red-500">Error: ${error.message}</p>`;
+            }
+        }
+
+        async function testChatEmpty() {
+            try {
+                const response = await axios.get('/api/chats/5/messages');
+                document.getElementById('results').innerHTML = `
+                    <h3 class="font-bold">Chat #5 Messages (${response.data.messages.length} messages):</h3>
+                    <div class="space-y-2 mt-2">
+                        ${response.data.messages.map(msg => `
+                            <div class="border p-2 rounded ${msg.role === 'assistant' ? 'bg-blue-50' : 'bg-green-50'}">
+                                <strong>${msg.role}:</strong> 
+                                ${msg.text || (msg.rendered_md ? 'Has rendered report' : 'No text')}
+                                ${msg.pii_detected ? '<br><em class="text-orange-600">PII Detected</em>' : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                    <p class="mt-2 text-orange-600">This chat has no assistant response - that's why it appears empty!</p>
+                `;
+            } catch (error) {
+                document.getElementById('results').innerHTML = `<p class="text-red-500">Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

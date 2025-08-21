@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Loading Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>Chat Loading Test</h1>
+    <button onclick="testLoadChat()">Load Chat #2 (Has Messages)</button>
+    <div id="results"></div>
+
+    <script>
+    async function testLoadChat() {
+        try {
+            console.log('Testing chat loading...');
+            const response = await axios.get('/api/chats/2/messages');
+            console.log('API Response:', response.data);
+            
+            document.getElementById('results').innerHTML = `
+                <h2>Messages Found: ${response.data.messages.length}</h2>
+                <pre>${JSON.stringify(response.data.messages, null, 2)}</pre>
+            `;
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('results').innerHTML = `<p style="color:red">Error: ${error.message}</p>`;
+        }
+    }
+    </script>
+</body>
+</html>

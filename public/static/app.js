@@ -268,24 +268,50 @@ class RadiologyAssistant {
   }
 
   async loadChats() {
+    console.log('📋 Loading chats...');
     try {
       const response = await axios.get('/api/chats');
       const chats = response.data.chats;
+      console.log(`✅ Loaded ${chats.length} chats:`, chats);
       
       const chatsList = document.getElementById('chats-list');
+      console.log('📍 chats-list element:', chatsList);
+      
+      if (!chatsList) {
+        console.error('❌ chats-list element not found!');
+        return;
+      }
+      
       if (chats.length === 0) {
         chatsList.innerHTML = '<div class="text-gray-500 text-sm">No chats yet</div>';
         return;
       }
 
-      chatsList.innerHTML = chats.map(chat => `
-        <div class="chat-item p-2 hover:bg-gray-50 rounded cursor-pointer" data-chat-id="${chat.id}">
-          <div class="font-medium text-sm truncate">${chat.title || 'Untitled'}</div>
-          <div class="text-xs text-gray-500">${dayjs(chat.updated_at).format('MMM D, h:mm A')}</div>
-        </div>
-      `).join('');
+      // Check if dayjs is available
+      if (typeof dayjs === 'undefined') {
+        console.error('❌ dayjs is not loaded!');
+        chatsList.innerHTML = chats.map(chat => `
+          <div class="chat-item p-2 hover:bg-gray-50 rounded cursor-pointer" data-chat-id="${chat.id}">
+            <div class="font-medium text-sm truncate">${chat.title || 'Untitled'}</div>
+            <div class="text-xs text-gray-500">${chat.updated_at}</div>
+          </div>
+        `).join('');
+      } else {
+        chatsList.innerHTML = chats.map(chat => `
+          <div class="chat-item p-2 hover:bg-gray-50 rounded cursor-pointer" data-chat-id="${chat.id}">
+            <div class="font-medium text-sm truncate">${chat.title || 'Untitled'}</div>
+            <div class="text-xs text-gray-500">${dayjs(chat.updated_at).format('MMM D, h:mm A')}</div>
+          </div>
+        `).join('');
+      }
+      
+      console.log(`✅ Rendered ${chats.length} chat items`);
     } catch (error) {
-      console.error('Error loading chats:', error);
+      console.error('❌ Error loading chats:', error);
+      const chatsList = document.getElementById('chats-list');
+      if (chatsList) {
+        chatsList.innerHTML = '<div class="text-red-500 text-sm">Error loading chats</div>';
+      }
     }
   }
 
@@ -311,6 +337,11 @@ class RadiologyAssistant {
     try {
       // Show loading state
       const container = document.getElementById('messages-container');
+      if (!container) {
+        console.error('❌ messages-container element not found!');
+        return;
+      }
+      
       container.innerHTML = `
         <div class="text-center text-gray-500 py-8">
           <div class="loading-spinner mb-4"></div>
@@ -319,10 +350,11 @@ class RadiologyAssistant {
       `;
 
       this.currentChatId = chatId;
+      console.log(`📡 Making API call to /api/chats/${chatId}/messages`);
       const response = await axios.get(`/api/chats/${chatId}/messages`);
       const messages = response.data.messages;
       
-      console.log(`✅ Loaded ${messages.length} messages for chat ${chatId}`);
+      console.log(`✅ Loaded ${messages.length} messages for chat ${chatId}:`, messages);
       this.displayMessages(messages);
       
       // Update active chat in sidebar
@@ -354,9 +386,16 @@ class RadiologyAssistant {
   }
 
   displayMessages(messages) {
+    console.log(`🎨 Displaying ${messages.length} messages...`);
     const container = document.getElementById('messages-container');
     
+    if (!container) {
+      console.error('❌ messages-container not found in displayMessages!');
+      return;
+    }
+    
     if (messages.length === 0) {
+      console.log('📭 No messages to display');
       container.innerHTML = `
         <div class="text-center text-gray-500 py-8">
           <i class="fas fa-comments text-4xl mb-4"></i>
@@ -405,8 +444,12 @@ class RadiologyAssistant {
       }
     }).join('');
 
+    console.log('🎨 Messages HTML generated, updating container...');
+    console.log('📏 Container HTML length:', container.innerHTML.length);
+    
     // Scroll to bottom
     container.scrollTop = container.scrollHeight;
+    console.log('✅ Messages displayed and scrolled to bottom');
   }
 
   clearMessages() {
