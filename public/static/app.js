@@ -517,7 +517,9 @@ class RadiologyAssistant {
     }
 
     // Disable send button and show loading
-    sendButton.disabled = true;\n    sendButton.classList.add('opacity-50', 'cursor-not-allowed');\n    console.log('🔒 Send button disabled');
+    sendButton.disabled = true;
+    sendButton.classList.add('opacity-50', 'cursor-not-allowed');
+    console.log('🔒 Send button disabled');
     sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Sending...</span>';
     this.showLoading();
     
@@ -568,7 +570,9 @@ class RadiologyAssistant {
       }
     } finally {
       // Always re-enable the button
-      sendButton.disabled = false;\n      sendButton.classList.remove('opacity-50', 'cursor-not-allowed');\n      console.log('🔓 Send button re-enabled');
+      sendButton.disabled = false;
+      sendButton.classList.remove('opacity-50', 'cursor-not-allowed');
+      console.log('🔓 Send button re-enabled');
       sendButton.innerHTML = '<i class="fas fa-paper-plane"></i> <span>Send</span>';
     }
   }
