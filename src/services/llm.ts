@@ -29,12 +29,12 @@ export class LLMService {
         { role: 'user' as const, content: userMessage }
       ]
 
-      // Call GPT-4o with optimized settings for factual, structured output
+      // Call GPT-4o (latest model) with optimized settings for medical accuracy
       const completion = await this.clients.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o',
         messages,
         max_tokens: 2000,
-        temperature: 0.1, // Very low temperature for maximum factual accuracy
+        temperature: 0.3, // Balanced temperature for medical accuracy with natural language
         top_p: 0.9, // High precision with focused sampling
         frequency_penalty: 0.1, // Reduce repetition
         presence_penalty: 0.0, // Don't penalize medical terminology repetition
@@ -172,10 +172,10 @@ export class LLMService {
       ]
 
       const completion = await this.clients.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o',
         messages,
         max_tokens: 2000,
-        temperature: 0.05, // Extremely low for maximum factual precision
+        temperature: 0.3, // Balanced temperature for medical accuracy with natural language
         top_p: 0.85, // Even tighter focus
         frequency_penalty: 0.2, // Higher penalty for repetition
         presence_penalty: 0.0,
