@@ -706,7 +706,13 @@ class RadiologyAssistant {
       postcode: /\b[A-Z]{1,2}[0-9][A-Z0-9]?\s*[0-9][A-Z]{2}\b/gi,
       niNumber: /\b[A-Z]{2}\s*\d{2}\s*\d{2}\s*\d{2}\s*[A-Z]\b/gi,
       email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-      phone: /\b(?:\+44|0)(?:\d{2}\s*\d{4}\s*\d{4}|\d{3}\s*\d{3}\s*\d{4}|\d{4}\s*\d{6})\b/g
+      phone: /\b(?:\+44|0)(?:\d{2}\s*\d{4}\s*\d{4}|\d{3}\s*\d{3}\s*\d{4}|\d{4}\s*\d{6})\b/g,
+      // Date patterns - various formats including spoken dates like "24th of seven 1975"
+      dateOfBirth: /\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+\d{4}|\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|date\s+of\s+birth\s+is\s+[^\,\.]+|\d{1,2}(?:st|nd|rd|th)?\s+of\s+\w+\s+\d{4})\b/gi,
+      // Patient names - common patterns
+      patientName: /\b(?:patient|mr|mrs|ms|miss|dr)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/gi,
+      // Simple date of birth phrase detection
+      dobPhrase: /\b(?:date\s+of\s+birth|d\.?o\.?b\.?|born\s+(?:on\s+)?|birthday)\s+is\s+[^\.!?]*\d{4}\b/gi
     };
 
     let detected = false;
@@ -717,7 +723,35 @@ class RadiologyAssistant {
       if (pattern.test(text)) {
         detected = true;
         detectedTypes.push(type);
-        cleanText = cleanText.replace(pattern, `[${type.toUpperCase()}]`);
+        // Custom replacements for different PII types
+        switch (type) {
+          case 'nhsNumber':
+            cleanText = cleanText.replace(pattern, '[NHS-NUMBER]');
+            break;
+          case 'postcode':
+            cleanText = cleanText.replace(pattern, '[POSTCODE]');
+            break;
+          case 'niNumber':
+            cleanText = cleanText.replace(pattern, '[NI-NUMBER]');
+            break;
+          case 'email':
+            cleanText = cleanText.replace(pattern, '[EMAIL]');
+            break;
+          case 'phone':
+            cleanText = cleanText.replace(pattern, '[PHONE]');
+            break;
+          case 'dateOfBirth':
+            cleanText = cleanText.replace(pattern, '[DATE-OF-BIRTH]');
+            break;
+          case 'patientName':
+            cleanText = cleanText.replace(pattern, '[PATIENT-NAME]');
+            break;
+          case 'dobPhrase':
+            cleanText = cleanText.replace(pattern, '[DATE-OF-BIRTH-INFORMATION]');
+            break;
+          default:
+            cleanText = cleanText.replace(pattern, `[${type.toUpperCase()}]`);
+        }
       }
     }
 
@@ -1394,7 +1428,13 @@ class RadiologyAssistant {
       postcode: /\b[A-Z]{1,2}[0-9][A-Z0-9]?\s*[0-9][A-Z]{2}\b/gi,
       niNumber: /\b[A-Z]{2}\s*\d{2}\s*\d{2}\s*\d{2}\s*[A-Z]\b/gi,
       email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-      phone: /\b(?:\+44|0)(?:\d{2}\s*\d{4}\s*\d{4}|\d{3}\s*\d{3}\s*\d{4}|\d{4}\s*\d{6})\b/g
+      phone: /\b(?:\+44|0)(?:\d{2}\s*\d{4}\s*\d{4}|\d{3}\s*\d{3}\s*\d{4}|\d{4}\s*\d{6})\b/g,
+      // Date patterns - various formats including spoken dates like "24th of seven 1975"
+      dateOfBirth: /\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+\d{4}|\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|date\s+of\s+birth\s+is\s+[^\,\.]+|\d{1,2}(?:st|nd|rd|th)?\s+of\s+\w+\s+\d{4})\b/gi,
+      // Patient names - common patterns
+      patientName: /\b(?:patient|mr|mrs|ms|miss|dr)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/gi,
+      // Simple date of birth phrase detection
+      dobPhrase: /\b(?:date\s+of\s+birth|d\.?o\.?b\.?|born\s+(?:on\s+)?|birthday)\s+is\s+[^\.!?]*\d{4}\b/gi
     };
 
     // Highlight each detected PII type
