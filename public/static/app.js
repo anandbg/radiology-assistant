@@ -85,8 +85,14 @@ class RadiologyAssistant {
         const templateId = e.target.closest('.template-card').dataset.templateId;
         this.selectTemplate(parseInt(templateId));
       } else if (e.target.closest('.chat-item')) {
-        const chatId = e.target.closest('.chat-item').dataset.chatId;
-        this.loadChat(parseInt(chatId));
+        const chatElement = e.target.closest('.chat-item');
+        const chatId = chatElement.dataset.chatId;
+        console.log('🔄 Loading chat:', chatId);
+        if (chatId) {
+          this.loadChat(parseInt(chatId));
+        } else {
+          console.error('❌ No chat ID found on element:', chatElement);
+        }
       }
     });
 
@@ -113,9 +119,17 @@ class RadiologyAssistant {
               <h1 class="text-2xl font-bold text-gray-900">Radiology Assistant</h1>
             </div>
             <div class="flex items-center space-x-4">
-              <div class="text-sm text-gray-600">
-                <i class="fas fa-coins mr-1"></i>
-                <span id="credits-remaining">Loading...</span> credits
+              <!-- Usage Stats -->
+              <div class="text-sm text-gray-600 space-y-1">
+                <div class="flex items-center">
+                  <i class="fas fa-coins mr-1"></i>
+                  <span id="credits-remaining">Loading...</span> credits
+                </div>
+                <div class="flex items-center cursor-pointer" onclick="radiologyApp.showUsageDetails()">
+                  <i class="fas fa-chart-line mr-1"></i>
+                  <span id="tokens-used">0</span> tokens
+                  <i class="fas fa-info-circle ml-1 text-gray-400"></i>
+                </div>
               </div>
               <button id="new-chat-button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
                 <i class="fas fa-plus"></i>
@@ -292,21 +306,50 @@ class RadiologyAssistant {
   }
 
   async loadChat(chatId) {
+    console.log(`🔄 Loading chat ${chatId}...`);
+    
     try {
+      // Show loading state
+      const container = document.getElementById('messages-container');
+      container.innerHTML = `
+        <div class="text-center text-gray-500 py-8">
+          <div class="loading-spinner mb-4"></div>
+          <p>Loading chat...</p>
+        </div>
+      `;
+
       this.currentChatId = chatId;
       const response = await axios.get(`/api/chats/${chatId}/messages`);
       const messages = response.data.messages;
       
+      console.log(`✅ Loaded ${messages.length} messages for chat ${chatId}`);
       this.displayMessages(messages);
       
       // Update active chat in sidebar
       document.querySelectorAll('.chat-item').forEach(item => {
-        item.classList.remove('bg-blue-50', 'border-blue-200');
+        item.classList.remove('bg-blue-50', 'border-blue-200', 'border');
       });
-      document.querySelector(`[data-chat-id="${chatId}"]`)?.classList.add('bg-blue-50', 'border-blue-200');
+      const activeChat = document.querySelector(`[data-chat-id="${chatId}"]`);
+      if (activeChat) {
+        activeChat.classList.add('bg-blue-50', 'border-blue-200', 'border');
+      }
+      
     } catch (error) {
-      console.error('Error loading chat:', error);
-      this.showError('Failed to load chat');
+      console.error('❌ Error loading chat:', error);
+      
+      // Show error state
+      const container = document.getElementById('messages-container');
+      container.innerHTML = `
+        <div class="text-center text-red-500 py-8">
+          <i class="fas fa-exclamation-triangle text-4xl mb-4"></i>
+          <p>Failed to load chat</p>
+          <button onclick="radiologyApp.loadChat(${chatId})" class="mt-2 text-blue-600 hover:text-blue-800">
+            Try again
+          </button>
+        </div>
+      `;
+      
+      this.showError('Failed to load chat: ' + (error.response?.data?.message || error.message));
     }
   }
 
@@ -356,6 +399,7 @@ class RadiologyAssistant {
               ${message.rendered_md ? this.markdownToHtml(message.rendered_md) : ''}
             </div>
             ${message.json_output ? this.renderJsonOutput(message.json_output) : ''}
+            ${message.rendered_md ? this.renderDownloadButtons(message) : ''}
           </div>
         `;
       }
@@ -1599,14 +1643,133 @@ class RadiologyAssistant {
       const response = await axios.get('/api/usage/me');
       const { usage, balance } = response.data;
       
+      // Update credits display
       const creditsElement = document.getElementById('credits-remaining');
       if (creditsElement) {
         const remaining = balance.credits_granted - balance.credits_used;
         creditsElement.textContent = remaining.toLocaleString();
       }
+
+      // Update tokens display
+      const tokensElement = document.getElementById('tokens-used');
+      if (tokensElement && usage) {
+        const totalTokens = usage.input_tokens + usage.output_tokens + (usage.transcription_duration || 0);
+        tokensElement.textContent = totalTokens.toLocaleString();
+      }
+
+      // Store usage data for details modal
+      this.currentUsage = { usage, balance };
+      
     } catch (error) {
       console.error('Error loading usage:', error);
+      // Set fallback values
+      const tokensElement = document.getElementById('tokens-used');
+      if (tokensElement) tokensElement.textContent = 'N/A';
     }
+  }
+
+  // Show detailed usage information in a modal
+  showUsageDetails() {
+    if (!this.currentUsage) {
+      this.showError('Usage information not available');
+      return;
+    }
+
+    const { usage, balance } = this.currentUsage;
+    
+    // Calculate costs based on OpenAI pricing (approximate)
+    const inputCost = (usage.input_tokens / 1000) * 0.0015; // GPT-4o input tokens
+    const outputCost = (usage.output_tokens / 1000) * 0.006; // GPT-4o output tokens  
+    const transcriptionCost = (usage.transcription_duration / 60) * 0.006; // Whisper per minute
+    const totalCost = inputCost + outputCost + transcriptionCost;
+
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    modal.onclick = (e) => { if (e.target === modal) document.body.removeChild(modal); };
+    
+    modal.innerHTML = `
+      <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Usage & Costs</h3>
+          <button onclick="document.body.removeChild(this.closest('.fixed'))" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <!-- Credits -->
+        <div class="mb-6">
+          <h4 class="text-sm font-medium text-gray-700 mb-2">Credits</h4>
+          <div class="bg-gray-50 rounded-lg p-3">
+            <div class="flex justify-between text-sm">
+              <span>Granted:</span>
+              <span>${balance.credits_granted?.toLocaleString() || 0}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span>Used:</span>
+              <span>${balance.credits_used?.toLocaleString() || 0}</span>
+            </div>
+            <div class="flex justify-between text-sm font-semibold border-t pt-1 mt-1">
+              <span>Remaining:</span>
+              <span>${((balance.credits_granted || 0) - (balance.credits_used || 0)).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Token Usage -->
+        <div class="mb-6">
+          <h4 class="text-sm font-medium text-gray-700 mb-2">Token Usage</h4>
+          <div class="bg-gray-50 rounded-lg p-3 space-y-2">
+            <div class="flex justify-between text-sm">
+              <span>Input tokens:</span>
+              <span>${usage.input_tokens?.toLocaleString() || 0}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span>Output tokens:</span>
+              <span>${usage.output_tokens?.toLocaleString() || 0}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span>Audio minutes:</span>
+              <span>${((usage.transcription_duration || 0) / 60).toFixed(1)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Estimated Costs -->
+        <div class="mb-6">
+          <h4 class="text-sm font-medium text-gray-700 mb-2">Estimated OpenAI Costs</h4>
+          <div class="bg-blue-50 rounded-lg p-3 space-y-1">
+            <div class="flex justify-between text-sm">
+              <span>Input:</span>
+              <span>$${inputCost.toFixed(4)}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span>Output:</span>
+              <span>$${outputCost.toFixed(4)}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span>Transcription:</span>
+              <span>$${transcriptionCost.toFixed(4)}</span>
+            </div>
+            <div class="flex justify-between text-sm font-semibold border-t pt-1 mt-1">
+              <span>Total:</span>
+              <span>$${totalCost.toFixed(4)}</span>
+            </div>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">
+            * Estimates based on current OpenAI pricing. Actual costs may vary.
+          </p>
+        </div>
+
+        <div class="text-center">
+          <button onclick="document.body.removeChild(this.closest('.fixed'))" 
+                  class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+            Close
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
   }
 
   renderAttachments(attachments) {
@@ -1620,6 +1783,30 @@ class RadiologyAssistant {
             ${file.name}
           </div>
         `).join('')}
+      </div>
+    `;
+  }
+
+  renderDownloadButtons(message) {
+    return `
+      <div class="mt-4 pt-3 border-t border-gray-200">
+        <div class="flex flex-wrap gap-2">
+          <button onclick="radiologyApp.downloadAsMarkdown(${message.id}, '${this.escapeForAttribute(message.text || 'report')}')" 
+                  class="inline-flex items-center px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors">
+            <i class="fas fa-download mr-1"></i>
+            Download .md
+          </button>
+          <button onclick="radiologyApp.downloadAsJson(${message.id}, '${this.escapeForAttribute(message.text || 'report')}')" 
+                  class="inline-flex items-center px-3 py-1 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-md transition-colors">
+            <i class="fas fa-download mr-1"></i>
+            Download .json
+          </button>
+          <button onclick="radiologyApp.copyToClipboard('${message.id}-content')" 
+                  class="inline-flex items-center px-3 py-1 text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
+            <i class="fas fa-copy mr-1"></i>
+            Copy Text
+          </button>
+        </div>
       </div>
     `;
   }
@@ -1656,6 +1843,139 @@ class RadiologyAssistant {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  escapeForAttribute(text) {
+    return text.replace(/'/g, "\\'").replace(/"/g, '\\"');
+  }
+
+  // Download assistant message as markdown file
+  async downloadAsMarkdown(messageId, filename) {
+    try {
+      console.log('📥 Downloading markdown for message:', messageId);
+      
+      // Find the message in current chat
+      const response = await axios.get(`/api/chats/${this.currentChatId}/messages`);
+      const message = response.data.messages.find(msg => msg.id === messageId);
+      
+      if (!message || !message.rendered_md) {
+        this.showError('No markdown content found for this message');
+        return;
+      }
+
+      // Create markdown content with metadata
+      const timestamp = new Date(message.created_at).toLocaleDateString();
+      const markdownContent = `# Radiology Report
+
+**Generated**: ${timestamp}
+**Chat ID**: ${this.currentChatId}
+**Message ID**: ${messageId}
+
+---
+
+${message.rendered_md}
+
+---
+
+*Generated by Radiology Assistant*
+`;
+
+      // Create and download file
+      this.downloadFile(markdownContent, `${this.sanitizeFilename(filename)}-${timestamp}.md`, 'text/markdown');
+      console.log('✅ Markdown download initiated');
+      
+    } catch (error) {
+      console.error('❌ Error downloading markdown:', error);
+      this.showError('Failed to download markdown file');
+    }
+  }
+
+  // Download assistant message as JSON file
+  async downloadAsJson(messageId, filename) {
+    try {
+      console.log('📥 Downloading JSON for message:', messageId);
+      
+      // Find the message in current chat
+      const response = await axios.get(`/api/chats/${this.currentChatId}/messages`);
+      const message = response.data.messages.find(msg => msg.id === messageId);
+      
+      if (!message) {
+        this.showError('Message not found');
+        return;
+      }
+
+      // Create comprehensive JSON export
+      const jsonExport = {
+        metadata: {
+          messageId: message.id,
+          chatId: this.currentChatId,
+          generated: new Date(message.created_at).toISOString(),
+          template: message.template_name || 'Unknown',
+          exportedAt: new Date().toISOString()
+        },
+        content: {
+          markdownReport: message.rendered_md || null,
+          structuredData: message.json_output ? JSON.parse(message.json_output) : null,
+          citations: message.citations_json ? JSON.parse(message.citations_json) : [],
+        },
+        original: {
+          userInput: message.text || '',
+          piiDetected: !!message.pii_detected,
+          attachments: message.attachments_json ? JSON.parse(message.attachments_json) : []
+        }
+      };
+
+      const timestamp = new Date(message.created_at).toLocaleDateString();
+      this.downloadFile(JSON.stringify(jsonExport, null, 2), `${this.sanitizeFilename(filename)}-${timestamp}.json`, 'application/json');
+      console.log('✅ JSON download initiated');
+      
+    } catch (error) {
+      console.error('❌ Error downloading JSON:', error);
+      this.showError('Failed to download JSON file');
+    }
+  }
+
+  // Copy message content to clipboard
+  async copyToClipboard(messageId) {
+    try {
+      const response = await axios.get(`/api/chats/${this.currentChatId}/messages`);
+      const message = response.data.messages.find(msg => msg.id.toString() === messageId.replace('-content', ''));
+      
+      if (!message || !message.rendered_md) {
+        this.showError('No content to copy');
+        return;
+      }
+
+      await navigator.clipboard.writeText(message.rendered_md);
+      this.showSuccess('Report copied to clipboard!');
+      
+    } catch (error) {
+      console.error('❌ Error copying to clipboard:', error);
+      this.showError('Failed to copy to clipboard');
+    }
+  }
+
+  // Utility function to download files
+  downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  // Sanitize filename for downloads
+  sanitizeFilename(filename) {
+    return filename
+      .replace(/[^\w\s-]/g, '') // Remove special characters except spaces, hyphens, underscores
+      .trim()
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .toLowerCase()
+      .substring(0, 50); // Limit length
   }
 
   showError(message) {
