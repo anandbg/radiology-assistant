@@ -27,8 +27,8 @@ app.use('*', async (c, next) => {
   // Create service clients (may be null in development)
   const clients = createServiceClients(c.env)
   
-  // Create Supabase client
-  const supabase = createSupabaseClient()
+  // Create Supabase client (pass Cloudflare env context)
+  const supabase = createSupabaseClient(c.env)
   const supabaseDB = supabase ? new SupabaseDB(supabase.client) : null
   
   // Initialize services

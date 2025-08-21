@@ -89,7 +89,7 @@ async function insertSampleData() {
     // Insert organization
     const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .upsert([{ id: 1, name: 'Demo Hospital', plan: 'pro' }], { onConflict: 'id' })
+      .upsert([{ id: 1, name: 'Demo Hospital', domain: 'demo.radiologyassistant.com' }], { onConflict: 'id' })
       .select()
     
     if (orgError && !orgError.message.includes('duplicate key')) {
