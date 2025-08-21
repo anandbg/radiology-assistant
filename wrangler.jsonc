@@ -10,4 +10,9 @@
   "vars": {
     "ENVIRONMENT": "production"
   }
+
+  // Note: Sensitive variables like OPENAI_API_KEY should be set via:
+  // 1. .dev.vars file for local development
+  // 2. wrangler secret for production deployment
+  // This keeps API keys secure and out of version control
 }

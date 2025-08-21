@@ -130,21 +130,37 @@ export class SupabaseDB {
 
   // Messages
   async insertUserMessage(chatId: string, text: string, transcriptData: any, attachments: any[], piiResult: any) {
+    // Safe JSON serialization
+    let transcriptJson = null
+    let attachmentsJson = null
+    let piiDetailsJson = null
+    
+    try {
+      transcriptJson = JSON.stringify({
+        local_transcript: transcriptData?.local_transcript || null,
+        whisper_transcript: transcriptData?.whisper_transcript || null,
+        combined_text: piiResult?.sanitized_text || text
+      })
+      attachmentsJson = JSON.stringify(attachments || [])
+      piiDetailsJson = piiResult?.detected ? JSON.stringify(piiResult) : null
+    } catch (error) {
+      console.error('Error serializing user message data:', error)
+      transcriptJson = JSON.stringify({ error: 'Failed to serialize transcript' })
+      attachmentsJson = JSON.stringify([])
+      piiDetailsJson = null
+    }
+
     const { data, error } = await this.client
       .from('messages')
       .insert({
         chat_id: chatId,
         user_id: 1, // Demo user
         role: 'user',
-        text: piiResult.sanitized_text || text || null,
-        transcript_text: JSON.stringify({
-          local_transcript: transcriptData.local_transcript,
-          whisper_transcript: transcriptData.whisper_transcript,
-          combined_text: piiResult.sanitized_text || text
-        }),
-        attachments_json: JSON.stringify(attachments || []),
-        pii_detected: piiResult.detected,
-        pii_details: piiResult.detected ? JSON.stringify(piiResult) : null,
+        text: piiResult?.sanitized_text || text || null,
+        transcript_text: transcriptJson,
+        attachments_json: attachmentsJson,
+        pii_detected: piiResult?.detected || false,
+        pii_details: piiDetailsJson,
         created_at: new Date().toISOString()
       })
       .select('id')
@@ -155,6 +171,21 @@ export class SupabaseDB {
   }
 
   async insertAssistantMessage(chatId: string, renderedMd: string, structuredOutput: any, citations: any[]) {
+    // Safe JSON serialization
+    let jsonOutput = null
+    let citationsJson = null
+    
+    try {
+      if (structuredOutput) {
+        jsonOutput = typeof structuredOutput === 'string' ? structuredOutput : JSON.stringify(structuredOutput)
+      }
+      citationsJson = JSON.stringify(citations || [])
+    } catch (error) {
+      console.error('Error serializing message data:', error)
+      jsonOutput = JSON.stringify({ error: 'Failed to serialize structured output' })
+      citationsJson = JSON.stringify([])
+    }
+
     const { data, error } = await this.client
       .from('messages')
       .insert({
@@ -162,8 +193,8 @@ export class SupabaseDB {
         user_id: 1, // Demo user
         role: 'assistant',
         rendered_md: renderedMd,
-        json_output: structuredOutput ? JSON.stringify(structuredOutput) : null,
-        citations_json: JSON.stringify(citations),
+        json_output: jsonOutput,
+        citations_json: citationsJson,
         created_at: new Date().toISOString()
       })
       .select('id')

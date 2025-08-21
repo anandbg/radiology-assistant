@@ -145,13 +145,51 @@ export class LLMService {
 
   // Build system prompt with template and RAG context
   private buildSystemPrompt(template: Template, contextChunks: RetrievedChunk[]): string {
-    let prompt = `You are an expert radiology AI assistant. Your task is to generate structured radiology reports based on clinical information and imaging findings.
+    // Parse template instructions from retrieval_config
+    let templateInstructions: any = {}
+    try {
+      if (template.retrieval_config) {
+        if (typeof template.retrieval_config === 'string') {
+          templateInstructions = JSON.parse(template.retrieval_config)
+        } else {
+          templateInstructions = template.retrieval_config
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing template instructions:', error)
+    }
 
-TEMPLATE INSTRUCTIONS:
-${template.instructions}
+    let prompt = `You are an expert radiology AI assistant specialized in generating structured radiology reports. Your task is to create professional, accurate reports based on clinical information and imaging findings.
+
+TEMPLATE: ${template.name}
+${template.description || ''}
+
+TEMPLATE FORMAT:
+${templateInstructions.template_format || 'Use standard radiology report format'}
+
+GENERAL RULES:`
+
+    // Add general rules
+    if (templateInstructions.general_rules && Array.isArray(templateInstructions.general_rules)) {
+      templateInstructions.general_rules.forEach((rule: string, index: number) => {
+        prompt += `\n${index + 1}. ${rule}`
+      })
+    } else {
+      prompt += '\n1. Follow template format exactly\n2. Convert phrases to full sentences\n3. Maintain professional medical language'
+    }
+
+    // Add macros section
+    if (templateInstructions.macros && Object.keys(templateInstructions.macros).length > 0) {
+      prompt += '\n\nMACRO REPLACEMENTS:'
+      Object.entries(templateInstructions.macros).forEach(([key, value]) => {
+        prompt += `\n- ${key}: "${value}"`
+      })
+    }
+
+    prompt += `
 
 OUTPUT SCHEMA:
-${template.output_schema ? `Please structure your response as JSON according to this schema:\n${template.output_schema}` : 'Provide a clear, professional radiology report in markdown format.'}
+${template.output_schema ? `Please structure your response as JSON according to this schema:\n${JSON.stringify(template.output_schema, null, 2)}` : 'Provide a clear, professional radiology report in markdown format.'}
 
 MEDICAL GUIDELINES:`
 
@@ -176,26 +214,56 @@ Please generate a complete radiology report based on the following clinical info
     return prompt
   }
 
-  // Build user message from request
+  // Build user message from request with template context
   private buildUserMessage(request: MessageRequest): string {
     let message = ''
 
+    // Add text input
     if (request.text) {
-      message += `Clinical Information: ${request.text}\n`
+      message += `Text Input: ${request.text}\n\n`
     }
 
+    // Add transcription if available (the two-stage approach)
     if (request.transcript_text) {
-      message += `Voice Notes: ${request.transcript_text}\n`
+      // Handle both string and object types for transcript_text
+      let transcriptContent = ''
+      try {
+        if (typeof request.transcript_text === 'string') {
+          // If it's a string, it might be JSON or plain text
+          try {
+            const parsed = JSON.parse(request.transcript_text)
+            transcriptContent = parsed.whisper_text || parsed.web_speech_text || request.transcript_text
+          } catch {
+            transcriptContent = request.transcript_text
+          }
+        } else {
+          // If it's already an object
+          transcriptContent = request.transcript_text.whisper_text || request.transcript_text.web_speech_text || JSON.stringify(request.transcript_text)
+        }
+      } catch (error) {
+        console.error('Error processing transcript:', error)
+        transcriptContent = String(request.transcript_text)
+      }
+      
+      message += `Audio Transcription: ${transcriptContent}\n\n`
     }
 
+    // Add file attachments
     if (request.attachments && request.attachments.length > 0) {
-      message += `\nAttached Files:\n`
+      message += `Attached Files:\n`
       request.attachments.forEach((file, index) => {
-        message += `${index + 1}. ${file.name} (${file.type})\n`
+        message += `${index + 1}. ${file.name} (${file.type}) - ${file.size} bytes\n`
       })
+      message += '\n'
     }
 
-    return message.trim() || 'Please generate a standard radiology report template.'
+    if (!message.trim()) {
+      message = 'Please generate a radiology report based on the selected template format.\n\n'
+    }
+
+    message += 'Please generate a complete radiology report following the template format and rules specified above.'
+
+    return message
   }
 
   // Calculate credits based on usage
@@ -267,39 +335,290 @@ Please generate a complete radiology report based on the following clinical info
     }))
   }
 
-  // Convert structured output to markdown
+  // Convert structured output to markdown using template format
   convertToMarkdown(structuredOutput: Record<string, any>, template: Template): string {
-    // This is a simplified converter - in production, use template-specific formatters
-    let markdown = `# ${template.name}\n\n`
-
-    if (structuredOutput.patient_info) {
-      markdown += `**Patient**: ${structuredOutput.patient_info.age}-year-old ${structuredOutput.patient_info.sex}\n\n`
+    // Parse template instructions to get template format
+    let templateInstructions: any = {}
+    try {
+      if (template.retrieval_config) {
+        if (typeof template.retrieval_config === 'string') {
+          templateInstructions = JSON.parse(template.retrieval_config)
+        } else {
+          templateInstructions = template.retrieval_config
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing template instructions:', error)
     }
 
-    if (structuredOutput.clinical_history) {
-      markdown += `**Clinical History**: ${structuredOutput.clinical_history}\n\n`
+    // Start with template header
+    let markdown = `# ${template.name} Report\n\n`
+
+    // Use template-specific formatting if available
+    if (templateInstructions.template_format) {
+      // For now, use a simplified approach - in production, implement template-specific formatters
+      if (template.name.includes('MRI')) {
+        return this.convertMRIToMarkdown(structuredOutput, templateInstructions)
+      } else if (template.name.includes('Chest')) {
+        return this.convertChestXrayToMarkdown(structuredOutput, templateInstructions)
+      } else if (template.name.includes('CT Head')) {
+        return this.convertCTHeadToMarkdown(structuredOutput, templateInstructions)
+      }
     }
 
-    if (structuredOutput.technique) {
-      markdown += `**Technique**: ${structuredOutput.technique}\n\n`
+    // Default formatting
+    return this.convertDefaultToMarkdown(structuredOutput, template)
+  }
+
+  // MRI-specific markdown converter - matches your uploaded template format
+  private convertMRIToMarkdown(output: Record<string, any>, instructions: any): string {
+    // Start with your preferred format style
+    let markdown = 'Here is the completed MRI Lumbosacral Spine Report based on your template and the provided information:\n\n'
+
+    if (output.clinical_information) {
+      markdown += `Clinical Information:\n${output.clinical_information}\n\n`
     }
 
-    if (structuredOutput.findings) {
-      markdown += `## Findings\n\n`
-      Object.entries(structuredOutput.findings).forEach(([key, value]) => {
-        const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-        markdown += `- **${label}**: ${value}\n`
-      })
-      markdown += '\n'
+    if (output.technique) {
+      markdown += `## Technique:\n${output.technique}\n\n`
     }
 
-    if (structuredOutput.impression) {
-      markdown += `## Impression\n\n${structuredOutput.impression}\n\n`
+    if (output.comparison) {
+      markdown += `## Comparison:\n${output.comparison}\n\n`
     }
 
-    if (structuredOutput.recommendations) {
-      markdown += `## Recommendations\n\n${structuredOutput.recommendations}\n\n`
+    markdown += 'Findings:\n'
+    
+    if (output.findings) {
+      if (output.findings.last_formed_disc) {
+        markdown += `${output.findings.last_formed_disc}\n\n`
+      }
+
+      if (output.findings.localizer_images) {
+        markdown += `Localizer images:\n${output.findings.localizer_images}\n\n`
+      }
+
+      if (output.findings.spinal_cord) {
+        const spinalCord = output.findings.spinal_cord.description || output.findings.spinal_cord
+        markdown += `Spinal cord:\n${spinalCord}\n\n`
+      }
+
+      if (output.findings.bones_and_joints) {
+        const bones = output.findings.bones_and_joints.description || output.findings.bones_and_joints
+        markdown += `Bones and joints:\n${bones}\n\n`
+      }
+
+      if (output.findings.thoracic_discs) {
+        const thoracic = output.findings.thoracic_discs.description || output.findings.thoracic_discs
+        markdown += `Visualized thoracic discs and disc levels:\n${thoracic}\n\n`
+      }
+
+      if (output.findings.lumbar_discs) {
+        const lumbar = output.findings.lumbar_discs.description || output.findings.lumbar_discs
+        // Format with bullet points for detailed findings
+        let lumbarFormatted = lumbar
+        
+        // Look for specific disc level mentions and format as bullet points
+        if (lumbar.includes('L1-2') || lumbar.includes('L2-3') || lumbar.includes('L3-4') || lumbar.includes('L4-5') || lumbar.includes('L5-S1')) {
+          // If it contains detailed disc analysis, keep the formatting
+          lumbarFormatted = lumbar.replace(/- At ([^.]+\.)/g, '\n- At $1')
+          lumbarFormatted = lumbarFormatted.replace(/^\n/, '') // Remove leading newline
+        }
+        
+        markdown += `Lumbar discs and disc levels:\n${lumbarFormatted}\n\n`
+      }
+
+      if (output.findings.sacrum_iliac) {
+        const sacrum = output.findings.sacrum_iliac.description || output.findings.sacrum_iliac
+        markdown += `Visualised sacrum and iliac bones:\n${sacrum}\n\n`
+      }
+
+      if (output.findings.soft_tissues) {
+        const softTissues = output.findings.soft_tissues.description || output.findings.soft_tissues
+        markdown += `Soft tissues:\n${softTissues}\n\n`
+      }
+
+      if (output.findings.other_findings) {
+        const other = output.findings.other_findings.description || output.findings.other_findings
+        markdown += `Other findings:\n${other}\n\n`
+      }
     }
+
+    if (output.conclusion_recommendations) {
+      // Format conclusion with bullet points for key findings
+      let conclusion = output.conclusion_recommendations
+      
+      // If conclusion contains multiple points, format as bullet points
+      if (conclusion.includes('Features are most likely to represent')) {
+        // Split into main statement and bullet points
+        const parts = conclusion.split('Features are most likely to represent the following as described and discussed above')
+        if (parts.length > 1) {
+          markdown += `Conclusion/Recommendations:\nFeatures are most likely to represent the following as described and discussed above:\n`
+          
+          // Format remaining text as bullet points if it contains multiple findings
+          let findings = parts[1].trim()
+          if (findings.includes('.') && findings.length > 100) {
+            // Split into sentences and format as bullets
+            const sentences = findings.split('.').filter(s => s.trim().length > 0)
+            sentences.forEach(sentence => {
+              if (sentence.trim()) {
+                markdown += `\n- ${sentence.trim()}.`
+              }
+            })
+          } else {
+            markdown += `\n${findings}`
+          }
+        } else {
+          markdown += `Conclusion/Recommendations:\n${conclusion}`
+        }
+      } else {
+        markdown += `Conclusion/Recommendations:\n${conclusion}`
+      }
+      markdown += '\n\n'
+    }
+
+    // Add professional closing
+    markdown += 'Let me know if you\'d like to adjust or add anything.\n'
+
+    return markdown
+  }
+
+  // Chest X-ray specific markdown converter
+  private convertChestXrayToMarkdown(output: Record<string, any>, instructions: any): string {
+    let markdown = '# Chest X-Ray Report\n\n'
+
+    if (output.clinical_information) {
+      markdown += `**Clinical Information:**\n${output.clinical_information}\n\n`
+    }
+
+    if (output.technique) {
+      markdown += `**Technique:**\n${output.technique}\n\n`
+    }
+
+    if (output.comparison) {
+      markdown += `**Comparison:**\n${output.comparison}\n\n`
+    }
+
+    if (output.findings) {
+      markdown += '**Findings:**\n\n'
+
+      if (output.findings.heart) {
+        markdown += `**Heart:**\n${output.findings.heart}\n\n`
+      }
+
+      if (output.findings.lungs) {
+        markdown += '**Lungs:**\n'
+        if (typeof output.findings.lungs === 'object') {
+          if (output.findings.lungs.right_lung) {
+            markdown += `Right lung: ${output.findings.lungs.right_lung}\n`
+          }
+          if (output.findings.lungs.left_lung) {
+            markdown += `Left lung: ${output.findings.lungs.left_lung}\n`
+          }
+        } else {
+          markdown += `${output.findings.lungs}\n`
+        }
+        markdown += '\n'
+      }
+
+      if (output.findings.pleura) {
+        markdown += `**Pleura:**\n${output.findings.pleura}\n\n`
+      }
+
+      if (output.findings.bones) {
+        markdown += `**Bones:**\n${output.findings.bones}\n\n`
+      }
+
+      if (output.findings.soft_tissues) {
+        markdown += `**Soft tissues:**\n${output.findings.soft_tissues}\n\n`
+      }
+
+      if (output.findings.lines_tubes) {
+        markdown += `**Lines and tubes:**\n${output.findings.lines_tubes}\n\n`
+      }
+    }
+
+    if (output.impression) {
+      markdown += `**Impression:**\n${output.impression}\n\n`
+    }
+
+    if (output.recommendations) {
+      markdown += `**Recommendations:**\n${output.recommendations}\n\n`
+    }
+
+    return markdown
+  }
+
+  // CT Head specific markdown converter
+  private convertCTHeadToMarkdown(output: Record<string, any>, instructions: any): string {
+    let markdown = '# CT Head Report\n\n'
+
+    if (output.clinical_information) {
+      markdown += `**Clinical Information:**\n${output.clinical_information}\n\n`
+    }
+
+    if (output.technique) {
+      markdown += `**Technique:**\n${output.technique}\n\n`
+    }
+
+    if (output.comparison) {
+      markdown += `**Comparison:**\n${output.comparison}\n\n`
+    }
+
+    if (output.findings) {
+      markdown += '**Findings:**\n\n'
+
+      if (output.findings.brain_parenchyma) {
+        markdown += `**Brain parenchyma:**\n${output.findings.brain_parenchyma}\n\n`
+      }
+
+      if (output.findings.ventricles) {
+        markdown += `**Ventricles:**\n${output.findings.ventricles}\n\n`
+      }
+
+      if (output.findings.cisterns) {
+        markdown += `**Cisterns:**\n${output.findings.cisterns}\n\n`
+      }
+
+      if (output.findings.skull_bones) {
+        markdown += `**Skull and bones:**\n${output.findings.skull_bones}\n\n`
+      }
+
+      if (output.findings.soft_tissues) {
+        markdown += `**Soft tissues:**\n${output.findings.soft_tissues}\n\n`
+      }
+    }
+
+    if (output.impression) {
+      markdown += `**Impression:**\n${output.impression}\n\n`
+    }
+
+    if (output.recommendations) {
+      markdown += `**Recommendations:**\n${output.recommendations}\n\n`
+    }
+
+    return markdown
+  }
+
+  // Default markdown converter
+  private convertDefaultToMarkdown(output: Record<string, any>, template: Template): string {
+    let markdown = `# ${template.name} Report\n\n`
+
+    // Generic field mapping
+    Object.entries(output).forEach(([key, value]) => {
+      const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      
+      if (typeof value === 'object' && value !== null) {
+        markdown += `**${label}:**\n`
+        Object.entries(value).forEach(([subKey, subValue]) => {
+          const subLabel = subKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+          markdown += `- **${subLabel}**: ${subValue}\n`
+        })
+        markdown += '\n'
+      } else {
+        markdown += `**${label}:**\n${value}\n\n`
+      }
+    })
 
     return markdown
   }

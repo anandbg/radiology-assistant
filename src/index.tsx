@@ -286,7 +286,9 @@ app.post('/api/chats/:id/messages', async (c) => {
   const chatId = c.req.param('id')
   
   try {
+    console.log('🔍 Processing message request...')
     const { text, transcript_text, whisper_transcript, attachments, template_id } = await c.req.json()
+    console.log('✅ Request data parsed:', { text, template_id, hasTranscript: !!transcript_text, hasWhisper: !!whisper_transcript })
     
     // Get services from context
     const piiDetection = c.get('piiDetection')
@@ -313,13 +315,16 @@ app.post('/api/chats/:id/messages', async (c) => {
 
     // Step 2: Get template for context
     let template
+    console.log('🔍 Getting template for ID:', template_id || 1)
     
     if (supabaseDB) {
       template = await supabaseDB.getTemplate((template_id || 1).toString())
+      console.log('📋 Template from Supabase:', template ? { id: template.id, name: template.name } : 'null')
     } else if (DB) {
       template = await DB.prepare(`
         SELECT * FROM templates WHERE id = ? AND is_active = TRUE
       `).bind(template_id || 1).first()
+      console.log('📋 Template from D1:', template ? { id: template.id, name: template.name } : 'null')
     } else {
       // Demo template
       template = {
@@ -333,7 +338,11 @@ app.post('/api/chats/:id/messages', async (c) => {
           recommendations: 'string'
         })
       }
+      console.log('📋 Using demo template')
     }
+    
+    console.log('🔍 Template output_schema type:', typeof template?.output_schema)
+    console.log('🔍 Template retrieval_config type:', typeof template?.retrieval_config)
 
     if (!template) {
       return c.json({ error: 'Template not found' }, 404)
@@ -380,9 +389,24 @@ app.post('/api/chats/:id/messages', async (c) => {
 
     // Step 4: RAG - Retrieve relevant context (if enabled for template)
     let contextChunks = []
-    const retrievalConfig = template.retrieval_config ? JSON.parse(template.retrieval_config) : null
+    let retrievalConfig = null
+    
+    console.log('🔍 Processing RAG configuration...')
+    try {
+      if (template.retrieval_config) {
+        if (typeof template.retrieval_config === 'string') {
+          retrievalConfig = JSON.parse(template.retrieval_config)
+        } else if (typeof template.retrieval_config === 'object') {
+          retrievalConfig = template.retrieval_config
+        }
+        console.log('📋 RAG config loaded:', retrievalConfig ? Object.keys(retrievalConfig) : 'null')
+      }
+    } catch (error) {
+      console.error('❌ Error parsing retrieval_config:', error)
+    }
     
     if (retrievalConfig?.enabled) {
+      console.log('🔍 RAG enabled - searching for context...')
       const ragResult = await vectorDB.searchSimilar({
         query: inputText,
         template_id: template_id,
@@ -391,6 +415,9 @@ app.post('/api/chats/:id/messages', async (c) => {
       }, 1) // orgId = 1 for demo
       
       contextChunks = ragResult.chunks
+      console.log('📋 RAG context chunks found:', contextChunks.length)
+    } else {
+      console.log('📋 RAG not enabled for this template')
     }
 
     // Step 5: Generate AI response 
@@ -443,7 +470,12 @@ app.post('/api/chats/:id/messages', async (c) => {
     // Step 8: Insert assistant response
     let assistantResult
     
+    console.log('🔍 Inserting assistant message...')
+    console.log('🔍 llmResult.structured_output type:', typeof llmResult.structured_output)
+    console.log('🔍 llmResult.structured_output value:', llmResult.structured_output)
+    
     if (supabaseDB) {
+      console.log('📝 Using Supabase for assistant message')
       assistantResult = await supabaseDB.insertAssistantMessage(
         chatId,
         renderedMarkdown,
@@ -451,19 +483,38 @@ app.post('/api/chats/:id/messages', async (c) => {
         citations
       )
     } else if (DB) {
+      console.log('📝 Using D1 for assistant message')
+      // Safe JSON serialization for D1
+      let structuredOutputJson = null
+      try {
+        if (llmResult.structured_output) {
+          if (typeof llmResult.structured_output === 'string') {
+            structuredOutputJson = llmResult.structured_output
+          } else {
+            structuredOutputJson = JSON.stringify(llmResult.structured_output)
+          }
+        }
+      } catch (jsonError) {
+        console.error('❌ Error serializing structured output:', jsonError)
+        structuredOutputJson = JSON.stringify({ error: 'Failed to serialize output' })
+      }
+      
       assistantResult = await DB.prepare(`
         INSERT INTO messages (chat_id, user_id, role, rendered_md, json_output, citations_json, created_at) 
         VALUES (?, 1, 'assistant', ?, ?, ?, CURRENT_TIMESTAMP)
       `).bind(
         chatId, 
         renderedMarkdown,
-        llmResult.structured_output ? JSON.stringify(llmResult.structured_output) : null,
-        JSON.stringify(citations)
+        structuredOutputJson,
+        JSON.stringify(citations || [])
       ).run()
     } else {
+      console.log('📝 Using demo mode for assistant message')
       // Demo mode - fake result
       assistantResult = { meta: { last_row_id: Math.floor(Math.random() * 1000000) } }
     }
+    
+    console.log('✅ Assistant message inserted with ID:', assistantResult.meta?.last_row_id)
 
     // Step 9: Record usage event
     if (llmResult.usage_event) {
@@ -517,8 +568,16 @@ app.post('/api/chats/:id/messages', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error sending message:', error);
-    return c.json({ error: 'Failed to send message' }, 500);
+    console.error('❌ Error sending message:', error);
+    console.error('❌ Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
+    return c.json({ 
+      error: 'Failed to send message',
+      debug: process.env.NODE_ENV === 'development' ? error.message : undefined
+    }, 500);
   }
 })
 
