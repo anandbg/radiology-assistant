@@ -451,9 +451,9 @@ app.post('/api/chats/:id/messages', async (c) => {
     // Step 5: Generate AI response 
     let llmResult, renderedMarkdown, citations
     
-    if (false) { // Temporarily disable hybrid system
+    if (hybridEnabled && llmService) {
       // Check if high-precision mode is requested
-      const useHighPrecision = request.high_precision === true || request.high_precision === 'true'
+      const useHighPrecision = false // Disable high-precision for stability
       
       // Use hybrid LLM service with appropriate method
       if (useHighPrecision) {
