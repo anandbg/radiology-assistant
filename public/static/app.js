@@ -67,7 +67,8 @@ class RadiologyAssistant {
 
     // Send message
     document.addEventListener('click', (e) => {
-      if (e.target.id === 'send-button') {
+      if (e.target.id === 'send-button' || e.target.closest('#send-button')) {
+        e.preventDefault();
         this.sendMessage();
       } else if (e.target.id === 'record-button') {
         console.log('Record button clicked!');
@@ -464,7 +465,14 @@ class RadiologyAssistant {
 
   async sendMessage() {
     const input = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
     const text = input.value.trim();
+    
+    // Prevent double-clicking
+    if (sendButton.disabled) {
+      console.log('Send already in progress');
+      return;
+    }
     
     // Check if we have any content to send
     // Use pendingAudioBlob if available (from recording results), otherwise localAudioBlob
@@ -489,7 +497,9 @@ class RadiologyAssistant {
       await this.createNewChat();
     }
 
-    // Show loading
+    // Disable send button and show loading
+    sendButton.disabled = true;
+    sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Sending...</span>';
     this.showLoading();
     
     try {
@@ -507,7 +517,8 @@ class RadiologyAssistant {
 
         console.log('Sending audio + text to server for processing');
         const response = await axios.post(`/api/chats/${this.currentChatId}/messages`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000 // 2 minute timeout
         });
 
         this.handleMessageResponse(response, input);
@@ -519,21 +530,34 @@ class RadiologyAssistant {
           attachments: this.uploadedFiles || []
         };
         
-        const response = await axios.post(`/api/chats/${this.currentChatId}/messages`, messageData);
+        const response = await axios.post(`/api/chats/${this.currentChatId}/messages`, messageData, {
+          timeout: 120000 // 2 minute timeout
+        });
         this.handleMessageResponse(response, input);
       }
       
     } catch (error) {
       console.error('Error sending message:', error);
+      this.clearLoading();
+      
       if (error.response?.data?.error === 'PII_DETECTED') {
         this.showPIIWarning(error.response.data.detected_entities);
+      } else if (error.code === 'ECONNABORTED') {
+        this.showError('Request timed out. Please try again.');
       } else {
         this.showError('Failed to send message: ' + (error.response?.data?.message || error.message));
       }
+    } finally {
+      // Always re-enable the button
+      sendButton.disabled = false;
+      sendButton.innerHTML = '<i class="fas fa-paper-plane"></i> <span>Send</span>';
     }
   }
 
   handleMessageResponse(response, input) {
+    // Clear loading state first
+    this.clearLoading();
+    
     // Handle PII detection error
     if (response.data.error === 'PII_DETECTED') {
       this.showPIIWarning(response.data.detected_entities);
@@ -549,6 +573,9 @@ class RadiologyAssistant {
     this.pendingAudioBlob = null;
     this.piiDetected = false;
     
+    // Reset file upload area
+    this.updateFileList();
+    
     // Show usage info
     if (response.data.usage) {
       this.showUsageInfo(response.data.usage);
@@ -558,6 +585,9 @@ class RadiologyAssistant {
     this.loadChat(this.currentChatId).then(() => {
       // Update usage after loading
       this.loadUsage();
+    }).catch((error) => {
+      console.error('Error reloading messages:', error);
+      this.showError('Failed to reload messages');
     });
   }
 
@@ -1150,8 +1180,13 @@ class RadiologyAssistant {
 
   showLoading() {
     const container = document.getElementById('messages-container');
+    
+    // Remove any existing loading indicators
+    this.clearLoading();
+    
     const loading = document.createElement('div');
-    loading.className = 'message-assistant';
+    loading.className = 'message-assistant loading-message';
+    loading.id = 'loading-indicator';
     loading.innerHTML = `
       <div class="flex items-center space-x-2">
         <div class="loading-spinner"></div>
@@ -1160,6 +1195,17 @@ class RadiologyAssistant {
     `;
     container.appendChild(loading);
     container.scrollTop = container.scrollHeight;
+  }
+  
+  clearLoading() {
+    const loadingElement = document.getElementById('loading-indicator');
+    if (loadingElement) {
+      loadingElement.remove();
+    }
+    
+    // Also remove any loading messages by class
+    const loadingMessages = document.querySelectorAll('.loading-message');
+    loadingMessages.forEach(el => el.remove());
   }
 
   async toggleRecording() {
