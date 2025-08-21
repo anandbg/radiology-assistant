@@ -31,7 +31,7 @@ export class LLMService {
 
       // Call GPT-4o with optimized settings for factual, structured output
       const completion = await this.clients.openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-3.5-turbo',
         messages,
         max_tokens: 2000,
         temperature: 0.1, // Very low temperature for maximum factual accuracy
@@ -172,7 +172,7 @@ export class LLMService {
       ]
 
       const completion = await this.clients.openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-3.5-turbo',
         messages,
         max_tokens: 2000,
         temperature: 0.05, // Extremely low for maximum factual precision
@@ -328,7 +328,24 @@ Generate a complete, structured radiology report based on the provided clinical 
       console.error('Error parsing template instructions:', error)
     }
 
-    let prompt = `You are an expert radiology AI assistant specialized in generating structured radiology reports. Your task is to create professional, accurate reports based on clinical information and imaging findings.
+    let prompt = `You are an expert radiology AI assistant. Generate professional radiology reports in this EXACT format:
+
+**Clinical Information:**
+[Patient information and clinical history]
+
+**Technique:**
+[Imaging technique and parameters]
+
+**Findings:**
+• [Finding 1]
+• [Finding 2]
+• [Finding 3]
+
+**Impression:**
+[Concise clinical impression]
+
+**Recommendations:**
+[Follow-up recommendations if needed]
 
 TEMPLATE: ${template.name}
 ${template.description || ''}

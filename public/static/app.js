@@ -67,8 +67,12 @@ class RadiologyAssistant {
 
     // Send message
     document.addEventListener('click', (e) => {
-      if (e.target.id === 'send-button' || e.target.closest('#send-button')) {
+      // Check if clicked element or its parent is the send button
+      const sendButton = e.target.closest('#send-button') || (e.target.id === 'send-button' ? e.target : null);
+      if (sendButton) {
         e.preventDefault();
+        e.stopPropagation();
+        console.log('🚀 Send button clicked!');
         this.sendMessage();
       } else if (e.target.id === 'record-button') {
         console.log('Record button clicked!');
@@ -101,9 +105,24 @@ class RadiologyAssistant {
     document.addEventListener('keydown', (e) => {
       if (e.target.id === 'message-input' && e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
+        console.log('⌨️ Enter key pressed - sending message');
         this.sendMessage();
       }
     });
+
+    // Add direct event listener for send button as backup
+    setTimeout(() => {
+      const sendBtn = document.getElementById('send-button');
+      if (sendBtn) {
+        sendBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('🚀 Direct send button clicked!');
+          this.sendMessage();
+        });
+        console.log('✅ Direct send button listener added');
+      }
+    }, 1000);
   }
 
   renderInterface() {
@@ -194,7 +213,7 @@ class RadiologyAssistant {
                   <button id="record-button" class="record-button idle" title="Click to start/stop voice recording">
                     <i class="fas fa-microphone"></i>
                   </button>
-                  <button id="send-button" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center space-x-2">
+                  <button id="send-button" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center space-x-2 send-btn">
                     <i class="fas fa-paper-plane"></i>
                     <span>Send</span>
                   </button>
@@ -498,7 +517,7 @@ class RadiologyAssistant {
     }
 
     // Disable send button and show loading
-    sendButton.disabled = true;
+    sendButton.disabled = true;\n    sendButton.classList.add('opacity-50', 'cursor-not-allowed');\n    console.log('🔒 Send button disabled');
     sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Sending...</span>';
     this.showLoading();
     
@@ -549,7 +568,7 @@ class RadiologyAssistant {
       }
     } finally {
       // Always re-enable the button
-      sendButton.disabled = false;
+      sendButton.disabled = false;\n      sendButton.classList.remove('opacity-50', 'cursor-not-allowed');\n      console.log('🔓 Send button re-enabled');
       sendButton.innerHTML = '<i class="fas fa-paper-plane"></i> <span>Send</span>';
     }
   }
