@@ -121,7 +121,7 @@ export class SupabaseStorageService {
         file_key: fileKey,
         url: publicUrl,
         attachment,
-        usage_event
+        usage_event: usageEvent
       }
     } catch (error) {
       console.error('Error uploading audio file:', error)
