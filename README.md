@@ -10,7 +10,7 @@
 - **Development**: https://3000-isyonk95ayb2o8zacz3j9-6532622b.e2b.dev
 - **API Health**: https://3000-isyonk95ayb2o8zacz3j9-6532622b.e2b.dev/api/health
 - **PII Detection Demo**: `POST /api/pii/detect`
-- **GitHub**: *To be configured*
+- **GitHub**: https://github.com/anandbg/radiology-assistant
 
 ## 🏗️ Hybrid Architecture Implementation
 
