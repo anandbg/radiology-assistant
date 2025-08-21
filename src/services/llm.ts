@@ -29,12 +29,15 @@ export class LLMService {
         { role: 'user' as const, content: userMessage }
       ]
 
-      // Call GPT-4o with structured output if schema provided
+      // Call GPT-4o with optimized settings for factual, structured output
       const completion = await this.clients.openai.chat.completions.create({
         model: 'gpt-4o',
         messages,
         max_tokens: 2000,
-        temperature: 0.3, // Lower temperature for medical accuracy
+        temperature: 0.1, // Very low temperature for maximum factual accuracy
+        top_p: 0.9, // High precision with focused sampling
+        frequency_penalty: 0.1, // Reduce repetition
+        presence_penalty: 0.0, // Don't penalize medical terminology repetition
         response_format: template.output_schema ? { type: 'json_object' } : undefined
       })
 
@@ -143,6 +146,172 @@ export class LLMService {
     }
   }
 
+  // Generate highly structured report with enhanced factual precision
+  async generateStructuredReport(
+    request: MessageRequest,
+    template: Template,
+    contextChunks: RetrievedChunk[] = [],
+    userId: number,
+    orgId: number
+  ): Promise<{
+    response: LLMResponse
+    usage_event: Partial<UsageEvent>
+    structured_output?: Record<string, any>
+  }> {
+    // Use even more restrictive settings for maximum factual accuracy
+    const originalMethod = this.generateReport
+    
+    // Override the completion call for this specific method
+    try {
+      const systemPrompt = this.buildHighPrecisionSystemPrompt(template, contextChunks)
+      const userMessage = this.buildUserMessage(request)
+
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        { role: 'user' as const, content: userMessage }
+      ]
+
+      const completion = await this.clients.openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages,
+        max_tokens: 2000,
+        temperature: 0.05, // Extremely low for maximum factual precision
+        top_p: 0.85, // Even tighter focus
+        frequency_penalty: 0.2, // Higher penalty for repetition
+        presence_penalty: 0.0,
+        response_format: template.output_schema ? { type: 'json_object' } : undefined
+      })
+
+      const response = completion.choices[0]?.message?.content || ''
+      const usage = completion.usage
+
+      let structuredOutput: Record<string, any> | undefined
+      if (template.output_schema && response) {
+        try {
+          structuredOutput = JSON.parse(response)
+        } catch (error) {
+          console.error('Failed to parse structured output:', error)
+        }
+      }
+
+      const usageEvent: Partial<UsageEvent> = {
+        org_id: orgId,
+        user_id: userId,
+        event_type: 'tokens_out',
+        tokens_in: usage?.prompt_tokens || 0,
+        tokens_out: usage?.completion_tokens || 0,
+        credits_charged: this.calculateCredits(usage?.total_tokens || 0, 0, 0, 0)
+      }
+
+      return {
+        response: {
+          content: response,
+          structured_output: structuredOutput,
+          usage: {
+            prompt_tokens: usage?.prompt_tokens || 0,
+            completion_tokens: usage?.completion_tokens || 0,
+            total_tokens: usage?.total_tokens || 0
+          }
+        },
+        usage_event: usageEvent,
+        structured_output: structuredOutput
+      }
+    } catch (error) {
+      console.error('Error generating structured report:', error)
+      throw new Error(`Failed to generate structured report: ${error}`)
+    }
+  }
+
+  // Build high-precision system prompt for maximum factual accuracy
+  private buildHighPrecisionSystemPrompt(template: Template, contextChunks: RetrievedChunk[]): string {
+    let templateInstructions: any = {}
+    try {
+      if (template.retrieval_config) {
+        if (typeof template.retrieval_config === 'string') {
+          templateInstructions = JSON.parse(template.retrieval_config)
+        } else {
+          templateInstructions = template.retrieval_config
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing template instructions:', error)
+    }
+
+    let prompt = `You are a precision-focused radiology AI assistant. Your primary objective is to generate highly structured, factual radiology reports with maximum clinical accuracy and minimal creative interpretation.
+
+TEMPLATE: ${template.name}
+${template.description || ''}
+
+TEMPLATE FORMAT:
+${templateInstructions.template_format || 'Use standard radiology report format'}
+
+MANDATORY STRUCTURAL REQUIREMENTS:`
+
+    // Add structural requirements first
+    prompt += `
+1. Use consistent section headers in bold (e.g., **Clinical Information:**)
+2. Break each section into bullet points when listing multiple items
+3. Use sub-bullets (- ) for detailed findings within categories  
+4. Present information in logical anatomical order
+5. Separate normal findings from abnormal findings clearly
+6. Use precise measurements and locations when available`
+
+    // Add general rules
+    if (templateInstructions.general_rules && Array.isArray(templateInstructions.general_rules)) {
+      prompt += '\n\nTEMPLATE-SPECIFIC RULES:'
+      templateInstructions.general_rules.forEach((rule: string, index: number) => {
+        prompt += `\n${index + 1}. ${rule}`
+      })
+    }
+
+    // Add macros section
+    if (templateInstructions.macros && Object.keys(templateInstructions.macros).length > 0) {
+      prompt += '\n\nMACRO REPLACEMENTS:'
+      Object.entries(templateInstructions.macros).forEach(([key, value]) => {
+        prompt += `\n- ${key}: "${value}"`
+      })
+    }
+
+    prompt += `
+
+OUTPUT SCHEMA:
+${template.output_schema ? `Structure your response as JSON according to this schema:\n${JSON.stringify(template.output_schema, null, 2)}` : 'Provide a clear, professional radiology report in structured markdown format.'}
+
+FACTUAL PRECISION GUIDELINES:`
+
+    // Add RAG context if available
+    if (contextChunks && contextChunks.length > 0) {
+      prompt += '\n\nRELEVANT MEDICAL KNOWLEDGE:\n'
+      contextChunks.forEach((chunk, index) => {
+        prompt += `\n${index + 1}. From "${chunk.source}":\n${chunk.text}\n`
+      })
+    }
+
+    prompt += `
+
+CRITICAL INSTRUCTIONS - FOLLOW EXACTLY:
+• FACTUAL ONLY: Base all statements on provided clinical data
+• BULLET POINTS: Use bullet points for all findings lists
+• SECTION HEADERS: Use consistent **Header:** format
+• NO CREATIVITY: Avoid interpretive or flowery language
+• PRECISE TERMINOLOGY: Use exact medical terms without elaboration
+• SYSTEMATIC ORDER: Present findings in anatomical sequence
+• CONSERVATIVE ASSESSMENT: If uncertain, state "clinical correlation recommended"
+• STRUCTURED FORMAT: Group related findings under appropriate subsections
+
+MANDATORY SECTION STRUCTURE:
+• **Clinical Information:** (if provided)
+• **Technique:** (scanning parameters/methods)
+• **Comparison:** (prior studies if mentioned)
+• **Findings:** (organized by anatomical region with bullet points)
+• **Impression/Conclusion:** (summarized key findings)
+• **Recommendations:** (next steps if applicable)
+
+Generate a complete, structured radiology report based on the provided clinical information:`
+
+    return prompt
+  }
+
   // Build system prompt with template and RAG context
   private buildSystemPrompt(template: Template, contextChunks: RetrievedChunk[]): string {
     // Parse template instructions from retrieval_config
@@ -208,6 +377,15 @@ MEDICAL GUIDELINES:`
 - Provide clear recommendations when appropriate
 - Never make definitive diagnoses without sufficient clinical correlation
 - If uncertain, recommend further evaluation or clinical correlation
+
+OUTPUT FORMATTING REQUIREMENTS:
+- Use clear section headers with consistent formatting
+- Structure each section with bullet points for key findings
+- Present information in logical, sequential order
+- Use precise medical terminology without unnecessary elaboration
+- Keep sentences concise and factual
+- Avoid creative language or subjective interpretations
+- List findings systematically rather than in narrative paragraphs
 
 Please generate a complete radiology report based on the following clinical information:`
 

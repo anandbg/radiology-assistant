@@ -279,6 +279,32 @@ app.get('/api/chats/:id/messages', async (c) => {
   }
 })
 
+// High-precision structured report generation endpoint
+app.post('/api/chats/:id/messages/precision', async (c) => {
+  const supabaseDB = c.get('supabaseDB')
+  const { DB } = c.env
+  const chatId = c.req.param('id')
+  
+  try {
+    console.log('🎯 Processing HIGH-PRECISION message request...')
+    const request = await c.req.json()
+    
+    // Force high precision mode
+    request.high_precision = true
+    
+    console.log('📋 High-precision mode ENABLED')
+    console.log('🔍 Temperature: 0.05, Top-P: 0.85, Frequency Penalty: 0.2')
+    
+    // Process with same logic as main endpoint but with forced high-precision
+    const result = await processMessageRequest(c, request, chatId, true) // Force precision mode
+    return result
+    
+  } catch (error) {
+    console.error('❌ Error in high-precision endpoint:', error)
+    return c.json({ error: 'Failed to generate high-precision report' }, 500)
+  }
+})
+
 // Enhanced message endpoint with hybrid architecture
 app.post('/api/chats/:id/messages', async (c) => {
   const supabaseDB = c.get('supabaseDB')
@@ -424,14 +450,29 @@ app.post('/api/chats/:id/messages', async (c) => {
     let llmResult, renderedMarkdown, citations
     
     if (hybridEnabled && llmService) {
-      // Use hybrid LLM service
-      llmResult = await llmService.generateReport(
-        { text: piiResult.sanitized_text || inputText, attachments },
-        template,
-        contextChunks,
-        1, // userId
-        1  // orgId
-      )
+      // Check if high-precision mode is requested
+      const useHighPrecision = request.high_precision === true || request.high_precision === 'true'
+      
+      // Use hybrid LLM service with appropriate method
+      if (useHighPrecision) {
+        console.log('📋 Using high-precision structured report generation')
+        llmResult = await llmService.generateStructuredReport(
+          { text: piiResult.sanitized_text || inputText, attachments },
+          template,
+          contextChunks,
+          1, // userId
+          1  // orgId
+        )
+      } else {
+        // Use standard generation
+        llmResult = await llmService.generateReport(
+          { text: piiResult.sanitized_text || inputText, attachments },
+          template,
+          contextChunks,
+          1, // userId
+          1  // orgId
+        )
+      }
 
       // Convert structured output to markdown if needed
       renderedMarkdown = llmResult.response.content
