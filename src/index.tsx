@@ -5,6 +5,7 @@ import { serveStatic } from 'hono/cloudflare-workers'
 import { jwt } from 'hono/jwt'
 import { renderer } from './renderer'
 import { createServiceClients } from './services/clients'
+import { createSupabaseClient, SupabaseDB, SupabaseService } from './services/supabase'
 import { VectorDBService } from './services/vector-db'
 import { LLMService } from './services/llm'
 import { PIIDetectionService } from './services/pii-detection'
@@ -26,6 +27,10 @@ app.use('*', async (c, next) => {
   // Create service clients (may be null in development)
   const clients = createServiceClients(c.env)
   
+  // Create Supabase client
+  const supabase = createSupabaseClient()
+  const supabaseDB = supabase ? new SupabaseDB(supabase.client) : null
+  
   // Initialize services
   let vectorDB = null
   let llmService = null
@@ -46,11 +51,14 @@ app.use('*', async (c, next) => {
   
   // Add to context
   c.set('clients', clients)
+  c.set('supabase', supabase)
+  c.set('supabaseDB', supabaseDB)
   c.set('vectorDB', vectorDB)
   c.set('llmService', llmService)
   c.set('piiDetection', piiDetection)
   c.set('fileStorage', fileStorage)
   c.set('hybrid_enabled', !!clients)
+  c.set('database_enabled', !!(supabaseDB || c.env.DB))
   
   await next()
 })
@@ -68,121 +76,214 @@ app.get('/api/health', (c) => {
 
 // Get user templates
 app.get('/api/templates', async (c) => {
-  const { DB } = c.env;
+  const supabaseDB = c.get('supabaseDB')
+  const { DB } = c.env
   
   try {
-    // For demo, return all templates - in production, filter by user permissions
-    const { results } = await DB.prepare(`
-      SELECT t.*, p.name as created_by_name 
-      FROM templates t 
-      LEFT JOIN profiles p ON t.created_by = p.id 
-      WHERE t.is_active = TRUE 
-      ORDER BY t.name
-    `).all();
+    let templates
+    
+    if (supabaseDB) {
+      // Use Supabase
+      templates = await supabaseDB.getTemplates()
+    } else if (DB) {
+      // Fallback to D1
+      const { results } = await DB.prepare(`
+        SELECT t.*, p.name as created_by_name 
+        FROM templates t 
+        LEFT JOIN profiles p ON t.created_by = p.id 
+        WHERE t.is_active = TRUE 
+        ORDER BY t.name
+      `).all()
+      templates = results
+    } else {
+      // Demo mode - return sample templates
+      templates = [
+        {
+          id: 1,
+          name: 'Chest X-Ray Report',
+          description: 'Standard chest radiograph reporting template',
+          is_active: true,
+          created_by_name: 'Demo User'
+        }
+      ]
+    }
 
-    return c.json({ templates: results });
+    return c.json({ templates })
   } catch (error) {
-    console.error('Error fetching templates:', error);
-    return c.json({ error: 'Failed to fetch templates' }, 500);
+    console.error('Error fetching templates:', error)
+    return c.json({ error: 'Failed to fetch templates' }, 500)
   }
 })
 
 // Get single template
 app.get('/api/templates/:id', async (c) => {
-  const { DB } = c.env;
-  const templateId = c.req.param('id');
+  const supabaseDB = c.get('supabaseDB')
+  const { DB } = c.env
+  const templateId = c.req.param('id')
   
   try {
-    const template = await DB.prepare(`
-      SELECT t.*, p.name as created_by_name 
-      FROM templates t 
-      LEFT JOIN profiles p ON t.created_by = p.id 
-      WHERE t.id = ? AND t.is_active = TRUE
-    `).bind(templateId).first();
-
-    if (!template) {
-      return c.json({ error: 'Template not found' }, 404);
+    let template
+    
+    if (supabaseDB) {
+      // Use Supabase
+      template = await supabaseDB.getTemplate(templateId)
+    } else if (DB) {
+      // Fallback to D1
+      template = await DB.prepare(`
+        SELECT t.*, p.name as created_by_name 
+        FROM templates t 
+        LEFT JOIN profiles p ON t.created_by = p.id 
+        WHERE t.id = ? AND t.is_active = TRUE
+      `).bind(templateId).first()
+    } else {
+      // Demo template
+      template = {
+        id: 1,
+        name: 'Chest X-Ray Report',
+        description: 'Standard chest radiograph reporting template',
+        is_active: true,
+        created_by_name: 'Demo User',
+        output_schema: JSON.stringify({
+          patient_info: { age: 'string', sex: 'string' },
+          clinical_history: 'string',
+          findings: {
+            heart: 'string',
+            lungs: 'string',
+            pleura: 'string',
+            bones: 'string'
+          },
+          impression: 'string',
+          recommendations: 'string'
+        })
+      }
     }
 
-    return c.json({ template });
+    if (!template) {
+      return c.json({ error: 'Template not found' }, 404)
+    }
+
+    return c.json({ template })
   } catch (error) {
-    console.error('Error fetching template:', error);
-    return c.json({ error: 'Failed to fetch template' }, 500);
+    console.error('Error fetching template:', error)
+    return c.json({ error: 'Failed to fetch template' }, 500)
   }
 })
 
 // Create new chat
 app.post('/api/chats', async (c) => {
-  const { DB } = c.env;
+  const supabaseDB = c.get('supabaseDB')
+  const { DB } = c.env
   
   try {
-    const { title, template_id } = await c.req.json();
+    const { title, template_id } = await c.req.json()
+    let result
     
-    // For demo, use default user and org
-    const result = await DB.prepare(`
-      INSERT INTO chats (org_id, user_id, title, template_id, created_at) 
-      VALUES (1, 1, ?, ?, CURRENT_TIMESTAMP)
-    `).bind(title || 'New Chat', template_id || 1).run();
+    if (supabaseDB) {
+      // Use Supabase
+      result = await supabaseDB.createChat(title, template_id)
+    } else if (DB) {
+      // Fallback to D1
+      const dbResult = await DB.prepare(`
+        INSERT INTO chats (org_id, user_id, title, template_id, created_at) 
+        VALUES (1, 1, ?, ?, CURRENT_TIMESTAMP)
+      `).bind(title || 'New Chat', template_id || 1).run()
+      
+      result = { 
+        chat_id: dbResult.meta.last_row_id,
+        title: title || 'New Chat',
+        template_id: template_id || 1
+      }
+    } else {
+      // Demo mode - generate fake ID
+      result = {
+        chat_id: Math.floor(Math.random() * 1000000),
+        title: title || 'New Chat',
+        template_id: template_id || 1
+      }
+    }
 
-    return c.json({ 
-      chat_id: result.meta.last_row_id,
-      title: title || 'New Chat',
-      template_id: template_id || 1
-    });
+    return c.json(result)
   } catch (error) {
-    console.error('Error creating chat:', error);
-    return c.json({ error: 'Failed to create chat' }, 500);
+    console.error('Error creating chat:', error)
+    return c.json({ error: 'Failed to create chat' }, 500)
   }
 })
 
 // Get user chats
 app.get('/api/chats', async (c) => {
-  const { DB } = c.env;
+  const supabaseDB = c.get('supabaseDB')
+  const { DB } = c.env
   
   try {
-    const { results } = await DB.prepare(`
-      SELECT c.*, t.name as template_name 
-      FROM chats c 
-      LEFT JOIN templates t ON c.template_id = t.id 
-      WHERE c.user_id = 1 
-      ORDER BY c.updated_at DESC
-    `).all();
+    let chats
+    
+    if (supabaseDB) {
+      // Use Supabase
+      chats = await supabaseDB.getChats()
+    } else if (DB) {
+      // Fallback to D1
+      const { results } = await DB.prepare(`
+        SELECT c.*, t.name as template_name 
+        FROM chats c 
+        LEFT JOIN templates t ON c.template_id = t.id 
+        WHERE c.user_id = 1 
+        ORDER BY c.updated_at DESC
+      `).all()
+      chats = results
+    } else {
+      // Demo mode - empty chats
+      chats = []
+    }
 
-    return c.json({ chats: results });
+    return c.json({ chats })
   } catch (error) {
-    console.error('Error fetching chats:', error);
-    return c.json({ error: 'Failed to fetch chats' }, 500);
+    console.error('Error fetching chats:', error)
+    return c.json({ error: 'Failed to fetch chats' }, 500)
   }
 })
 
 // Get chat messages
 app.get('/api/chats/:id/messages', async (c) => {
-  const { DB } = c.env;
-  const chatId = c.req.param('id');
+  const supabaseDB = c.get('supabaseDB')
+  const { DB } = c.env
+  const chatId = c.req.param('id')
   
   try {
-    const { results } = await DB.prepare(`
-      SELECT m.*, p.name as user_name 
-      FROM messages m 
-      LEFT JOIN profiles p ON m.user_id = p.id 
-      WHERE m.chat_id = ? 
-      ORDER BY m.created_at ASC
-    `).bind(chatId).all();
+    let messages
+    
+    if (supabaseDB) {
+      // Use Supabase
+      messages = await supabaseDB.getChatMessages(chatId)
+    } else if (DB) {
+      // Fallback to D1
+      const { results } = await DB.prepare(`
+        SELECT m.*, p.name as user_name 
+        FROM messages m 
+        LEFT JOIN profiles p ON m.user_id = p.id 
+        WHERE m.chat_id = ? 
+        ORDER BY m.created_at ASC
+      `).bind(chatId).all()
+      messages = results
+    } else {
+      // Demo mode - empty messages
+      messages = []
+    }
 
-    return c.json({ messages: results });
+    return c.json({ messages })
   } catch (error) {
-    console.error('Error fetching messages:', error);
-    return c.json({ error: 'Failed to fetch messages' }, 500);
+    console.error('Error fetching messages:', error)
+    return c.json({ error: 'Failed to fetch messages' }, 500)
   }
 })
 
 // Enhanced message endpoint with hybrid architecture
 app.post('/api/chats/:id/messages', async (c) => {
-  const { DB } = c.env;
-  const chatId = c.req.param('id');
+  const supabaseDB = c.get('supabaseDB')
+  const { DB } = c.env
+  const chatId = c.req.param('id')
   
   try {
-    const { text, transcript_text, whisper_transcript, attachments, template_id } = await c.req.json();
+    const { text, transcript_text, whisper_transcript, attachments, template_id } = await c.req.json()
     
     // Get services from context
     const piiDetection = c.get('piiDetection')
@@ -208,30 +309,71 @@ app.post('/api/chats/:id/messages', async (c) => {
     }
 
     // Step 2: Get template for context
-    const template = await DB.prepare(`
-      SELECT * FROM templates WHERE id = ? AND is_active = TRUE
-    `).bind(template_id || 1).first();
+    let template
+    
+    if (supabaseDB) {
+      template = await supabaseDB.getTemplate((template_id || 1).toString())
+    } else if (DB) {
+      template = await DB.prepare(`
+        SELECT * FROM templates WHERE id = ? AND is_active = TRUE
+      `).bind(template_id || 1).first()
+    } else {
+      // Demo template
+      template = {
+        id: 1,
+        name: 'Chest X-Ray Report',
+        output_schema: JSON.stringify({
+          patient_info: { age: 'string', sex: 'string' },
+          clinical_history: 'string',
+          findings: { heart: 'string', lungs: 'string', pleura: 'string', bones: 'string' },
+          impression: 'string',
+          recommendations: 'string'
+        })
+      }
+    }
 
     if (!template) {
-      return c.json({ error: 'Template not found' }, 404);
+      return c.json({ error: 'Template not found' }, 404)
     }
 
     // Step 3: Insert user message with PII status and both transcripts
-    const userResult = await DB.prepare(`
-      INSERT INTO messages (chat_id, user_id, role, text, transcript_text, attachments_json, pii_detected, pii_details, created_at) 
-      VALUES (?, 1, 'user', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).bind(
-      chatId, 
-      piiResult.sanitized_text || inputText || null, 
-      JSON.stringify({
-        local_transcript: localTranscript,
-        whisper_transcript: whisper_transcript,
-        combined_text: piiResult.sanitized_text || inputText
-      }), 
-      JSON.stringify(attachments || []),
-      piiResult.detected ? 1 : 0,
-      piiResult.detected ? JSON.stringify(piiDetection.getPIISummary(piiResult)) : null
-    ).run();
+    let userResult
+    
+    if (supabaseDB) {
+      userResult = await supabaseDB.insertUserMessage(
+        chatId,
+        piiResult.sanitized_text || inputText || null,
+        {
+          local_transcript: localTranscript,
+          whisper_transcript: whisper_transcript,
+          combined_text: piiResult.sanitized_text || inputText
+        },
+        attachments || [],
+        {
+          detected: piiResult.detected,
+          ...piiDetection.getPIISummary(piiResult)
+        }
+      )
+    } else if (DB) {
+      userResult = await DB.prepare(`
+        INSERT INTO messages (chat_id, user_id, role, text, transcript_text, attachments_json, pii_detected, pii_details, created_at) 
+        VALUES (?, 1, 'user', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).bind(
+        chatId, 
+        piiResult.sanitized_text || inputText || null, 
+        JSON.stringify({
+          local_transcript: localTranscript,
+          whisper_transcript: whisper_transcript,
+          combined_text: piiResult.sanitized_text || inputText
+        }), 
+        JSON.stringify(attachments || []),
+        piiResult.detected ? 1 : 0,
+        piiResult.detected ? JSON.stringify(piiDetection.getPIISummary(piiResult)) : null
+      ).run()
+    } else {
+      // Demo mode - fake result
+      userResult = { meta: { last_row_id: Math.floor(Math.random() * 1000000) } }
+    }
 
     // Step 4: RAG - Retrieve relevant context (if enabled for template)
     let contextChunks = []
@@ -296,37 +438,65 @@ app.post('/api/chats/:id/messages', async (c) => {
     }
 
     // Step 8: Insert assistant response
-    const assistantResult = await DB.prepare(`
-      INSERT INTO messages (chat_id, user_id, role, rendered_md, json_output, citations_json, created_at) 
-      VALUES (?, 1, 'assistant', ?, ?, ?, CURRENT_TIMESTAMP)
-    `).bind(
-      chatId, 
-      renderedMarkdown,
-      llmResult.structured_output ? JSON.stringify(llmResult.structured_output) : null,
-      JSON.stringify(citations)
-    ).run();
+    let assistantResult
+    
+    if (supabaseDB) {
+      assistantResult = await supabaseDB.insertAssistantMessage(
+        chatId,
+        renderedMarkdown,
+        llmResult.structured_output,
+        citations
+      )
+    } else if (DB) {
+      assistantResult = await DB.prepare(`
+        INSERT INTO messages (chat_id, user_id, role, rendered_md, json_output, citations_json, created_at) 
+        VALUES (?, 1, 'assistant', ?, ?, ?, CURRENT_TIMESTAMP)
+      `).bind(
+        chatId, 
+        renderedMarkdown,
+        llmResult.structured_output ? JSON.stringify(llmResult.structured_output) : null,
+        JSON.stringify(citations)
+      ).run()
+    } else {
+      // Demo mode - fake result
+      assistantResult = { meta: { last_row_id: Math.floor(Math.random() * 1000000) } }
+    }
 
     // Step 9: Record usage event
     if (llmResult.usage_event) {
-      await DB.prepare(`
-        INSERT INTO usage_events (org_id, user_id, chat_id, message_id, event_type, tokens_in, tokens_out, credits_charged, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `).bind(
-        llmResult.usage_event.org_id,
-        llmResult.usage_event.user_id,
-        chatId,
-        assistantResult.meta.last_row_id,
-        llmResult.usage_event.event_type,
-        llmResult.usage_event.tokens_in || 0,
-        llmResult.usage_event.tokens_out || 0,
-        llmResult.usage_event.credits_charged
-      ).run();
+      if (supabaseDB) {
+        await supabaseDB.insertUsageEvent(
+          llmResult.usage_event,
+          chatId,
+          assistantResult.meta.last_row_id
+        )
+      } else if (DB) {
+        await DB.prepare(`
+          INSERT INTO usage_events (org_id, user_id, chat_id, message_id, event_type, tokens_in, tokens_out, credits_charged, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `).bind(
+          llmResult.usage_event.org_id,
+          llmResult.usage_event.user_id,
+          chatId,
+          assistantResult.meta.last_row_id,
+          llmResult.usage_event.event_type,
+          llmResult.usage_event.tokens_in || 0,
+          llmResult.usage_event.tokens_out || 0,
+          llmResult.usage_event.credits_charged
+        ).run()
+      }
+      // Demo mode - no action needed
     }
 
     // Step 10: Update chat timestamp
-    await DB.prepare(`
-      UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).bind(chatId).run();
+    if (supabaseDB) {
+      await supabaseDB.updateChatTimestamp(chatId)
+    } else if (DB) {
+      await DB.prepare(`
+        UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).bind(chatId).run()
+    }
+    // Demo mode - no action needed
 
     return c.json({
       user_message_id: userResult.meta.last_row_id,
@@ -686,32 +856,54 @@ app.post('/api/knowledge/search', async (c) => {
 
 // Usage statistics with hybrid tracking
 app.get('/api/usage/me', async (c) => {
-  const { DB } = c.env;
+  const supabaseDB = c.get('supabaseDB')
+  const { DB } = c.env
   
   try {
-    const usage = await DB.prepare(`
-      SELECT 
-        SUM(credits_charged) as total_credits_used,
-        COUNT(*) as total_requests,
-        SUM(tokens_in) as total_tokens_in,
-        SUM(tokens_out) as total_tokens_out,
-        SUM(audio_minutes) as total_audio_minutes,
-        SUM(pages) as total_pages
-      FROM usage_events 
-      WHERE user_id = 1 AND created_at >= date('now', 'start of month')
-    `).first();
-
-    const balance = await DB.prepare(`
-      SELECT credits_granted, credits_used 
-      FROM credit_balances 
-      WHERE org_id = 1 
-      ORDER BY created_at DESC 
-      LIMIT 1
-    `).first();
+    let usage, balance
+    
+    if (supabaseDB) {
+      // Use Supabase
+      usage = await supabaseDB.getUserUsage()
+      balance = await supabaseDB.getCreditBalance()
+    } else if (DB) {
+      // Fallback to D1
+      usage = await DB.prepare(`
+        SELECT 
+          SUM(credits_charged) as total_credits_used,
+          COUNT(*) as total_requests,
+          SUM(tokens_in) as total_tokens_in,
+          SUM(tokens_out) as total_tokens_out,
+          SUM(audio_minutes) as total_audio_minutes,
+          SUM(pages) as total_pages
+        FROM usage_events 
+        WHERE user_id = 1 AND created_at >= date('now', 'start of month')
+      `).first()
+      
+      balance = await DB.prepare(`
+        SELECT credits_granted, credits_used 
+        FROM credit_balances 
+        WHERE org_id = 1 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `).first()
+    } else {
+      // Demo mode
+      usage = { total_credits_used: 0, total_requests: 0, total_tokens_in: 0, total_tokens_out: 0, total_audio_minutes: 0, total_pages: 0 }
+      balance = { credits_granted: 1000, credits_used: 0 }
+    }
 
     // Get storage stats
     const fileStorage = c.get('fileStorage')
-    const storageStats = await fileStorage.getStorageStats(1)
+    let storageStats = { used_bytes: 0, total_files: 0 }
+    
+    if (fileStorage) {
+      try {
+        storageStats = await fileStorage.getStorageStats(1)
+      } catch (e) {
+        console.warn('Storage stats not available:', e.message)
+      }
+    }
 
     return c.json({
       usage: usage || { total_credits_used: 0, total_requests: 0 },
@@ -723,10 +915,10 @@ app.get('/api/usage/me', async (c) => {
         audio_minutes: usage?.total_audio_minutes || 0,
         pages_processed: usage?.total_pages || 0
       }
-    });
+    })
   } catch (error) {
-    console.error('Error fetching usage:', error);
-    return c.json({ error: 'Failed to fetch usage' }, 500);
+    console.error('Error fetching usage:', error)
+    return c.json({ error: 'Failed to fetch usage' }, 500)
   }
 })
 
