@@ -22,6 +22,8 @@ app.use(renderer)
 
 // Serve static files from public directory
 app.use('/static/*', serveStatic({ root: './public' }))
+app.use('/favicon.ico', serveStatic({ root: './public' }))
+app.use('/favicon.svg', serveStatic({ root: './public' }))
 
 // Initialize hybrid services middleware
 app.use('*', async (c, next) => {
