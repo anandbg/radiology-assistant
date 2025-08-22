@@ -7,9 +7,10 @@
 - **Features**: Template-based report generation, local PII detection, RAG-enhanced knowledge retrieval, voice recording, file uploads, hybrid service architecture
 
 ## 🚀 Live URLs
-- **🌍 Production (Cloudflare Pages)**: https://7f7deceb.radiology-assistant.pages.dev
-- **🔍 API Health**: https://7f7deceb.radiology-assistant.pages.dev/api/health
-- **📋 Templates API**: https://7f7deceb.radiology-assistant.pages.dev/api/templates
+- **🌍 Production (Cloudflare Pages)**: https://radiology-assistant.pages.dev
+- **🚀 Latest Deployment**: https://53c9db95.radiology-assistant.pages.dev
+- **🔍 API Health**: https://radiology-assistant.pages.dev/api/health
+- **📋 Templates API**: https://radiology-assistant.pages.dev/api/templates
 - **🛡️ PII Detection Demo**: `POST /api/pii/detect`
 - **🔧 Development**: https://3000-isyonk95ayb2o8zacz3j9-6532622b.e2b.dev
 - **📂 GitHub**: https://github.com/anandbg/radiology-assistant
