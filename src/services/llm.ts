@@ -14,7 +14,6 @@ export class LLMService {
   ): Promise<{
     response: LLMResponse
     usage_event: Partial<UsageEvent>
-    structured_output?: Record<string, any>
   }> {
     try {
       // Build system prompt with template instructions and context
@@ -33,26 +32,32 @@ export class LLMService {
       const completion = await this.clients.openai.chat.completions.create({
         model: 'gpt-4o',
         messages,
-        max_tokens: 2000,
-        temperature: 0.3, // Balanced temperature for medical accuracy with natural language
-        top_p: 0.9, // High precision with focused sampling
-        frequency_penalty: 0.1, // Reduce repetition
-        presence_penalty: 0.0, // Don't penalize medical terminology repetition
-        response_format: template.output_schema ? { type: 'json_object' } : undefined
+        max_tokens: 2500, // Increased for comprehensive template coverage
+        temperature: 0.1, // Lower temperature for stricter format adherence
+        top_p: 0.8, // More focused sampling for template compliance
+        frequency_penalty: 0.0, // Allow medical terminology repetition
+        presence_penalty: 0.3, // Encourage comprehensive coverage of all sections
+
       })
 
-      const response = completion.choices[0]?.message?.content || ''
+      let response = completion.choices[0]?.message?.content || ''
       const usage = completion.usage
 
-      // Parse structured output if JSON schema provided
-      let structuredOutput: Record<string, any> | undefined
-      if (template.output_schema && response) {
-        try {
-          structuredOutput = JSON.parse(response)
-        } catch (error) {
-          console.error('Failed to parse structured output:', error)
-        }
+      // Validate template compliance and log warnings
+      const validation = this.validateTemplateCompliance(response, template)
+      if (!validation.isCompliant) {
+        console.warn('⚠️ Template compliance issues detected:')
+        validation.suggestions.forEach(suggestion => {
+          console.warn(`  - ${suggestion}`)
+        })
+        
+        // Add a compliance note to the response for debugging
+        response += '\n\n<!-- Template compliance issues detected: ' + validation.suggestions.join(', ') + ' -->'
+      } else {
+        console.log('✅ Response follows template format correctly')
       }
+
+      // No longer parsing structured JSON output - using markdown format only
 
       // Create usage event for billing
       const usageEvent: Partial<UsageEvent> = {
@@ -67,15 +72,13 @@ export class LLMService {
       return {
         response: {
           content: response,
-          structured_output: structuredOutput,
           usage: {
             prompt_tokens: usage?.prompt_tokens || 0,
             completion_tokens: usage?.completion_tokens || 0,
             total_tokens: usage?.total_tokens || 0
           }
         },
-        usage_event: usageEvent,
-        structured_output: structuredOutput
+        usage_event: usageEvent
       }
     } catch (error) {
       console.error('Error generating report:', error)
@@ -156,7 +159,6 @@ export class LLMService {
   ): Promise<{
     response: LLMResponse
     usage_event: Partial<UsageEvent>
-    structured_output?: Record<string, any>
   }> {
     // Use even more restrictive settings for maximum factual accuracy
     const originalMethod = this.generateReport
@@ -174,25 +176,32 @@ export class LLMService {
       const completion = await this.clients.openai.chat.completions.create({
         model: 'gpt-4o',
         messages,
-        max_tokens: 2000,
-        temperature: 0.3, // Balanced temperature for medical accuracy with natural language
-        top_p: 0.85, // Even tighter focus
-        frequency_penalty: 0.2, // Higher penalty for repetition
-        presence_penalty: 0.0,
-        response_format: template.output_schema ? { type: 'json_object' } : undefined
+        max_tokens: 2500, // Increased for comprehensive template coverage
+        temperature: 0.05, // Very low temperature for maximum format compliance
+        top_p: 0.7, // Tight focus for structured output
+        frequency_penalty: 0.0, // Allow medical terminology repetition
+        presence_penalty: 0.4, // Strong encouragement for comprehensive coverage
+
       })
 
-      const response = completion.choices[0]?.message?.content || ''
+      let response = completion.choices[0]?.message?.content || ''
       const usage = completion.usage
 
-      let structuredOutput: Record<string, any> | undefined
-      if (template.output_schema && response) {
-        try {
-          structuredOutput = JSON.parse(response)
-        } catch (error) {
-          console.error('Failed to parse structured output:', error)
-        }
+      // Validate template compliance and log warnings (structured report)
+      const validation = this.validateTemplateCompliance(response, template)
+      if (!validation.isCompliant) {
+        console.warn('⚠️ [STRUCTURED] Template compliance issues detected:')
+        validation.suggestions.forEach(suggestion => {
+          console.warn(`  - ${suggestion}`)
+        })
+        
+        // Add a compliance note to the response for debugging
+        response += '\n\n<!-- Structured report template compliance issues: ' + validation.suggestions.join(', ') + ' -->'
+      } else {
+        console.log('✅ [STRUCTURED] Response follows template format correctly')
       }
+
+      // No longer parsing structured JSON output - using markdown format only
 
       const usageEvent: Partial<UsageEvent> = {
         org_id: orgId,
@@ -206,15 +215,13 @@ export class LLMService {
       return {
         response: {
           content: response,
-          structured_output: structuredOutput,
           usage: {
             prompt_tokens: usage?.prompt_tokens || 0,
             completion_tokens: usage?.completion_tokens || 0,
             total_tokens: usage?.total_tokens || 0
           }
         },
-        usage_event: usageEvent,
-        structured_output: structuredOutput
+        usage_event: usageEvent
       }
     } catch (error) {
       console.error('Error generating structured report:', error)
@@ -237,24 +244,24 @@ export class LLMService {
       console.error('Error parsing template instructions:', error)
     }
 
-    let prompt = `You are a precision-focused radiology AI assistant. Your primary objective is to generate highly structured, factual radiology reports with maximum clinical accuracy and minimal creative interpretation.
+    let prompt = `🚨 CRITICAL INSTRUCTION: You are a precision radiology AI that MUST follow the EXACT template format provided. Deviation from the format is not acceptable.
 
-TEMPLATE: ${template.name}
+📋 TEMPLATE: ${template.name}
 ${template.description || ''}
 
-TEMPLATE FORMAT:
+⚠️ MANDATORY TEMPLATE FORMAT - FOLLOW EXACTLY:
 ${templateInstructions.template_format || 'Use standard radiology report format'}
 
-MANDATORY STRUCTURAL REQUIREMENTS:`
+🔴 ABSOLUTE REQUIREMENTS - NON-NEGOTIABLE:`
 
     // Add structural requirements first
     prompt += `
-1. Use consistent section headers in bold (e.g., **Clinical Information:**)
-2. Break each section into bullet points when listing multiple items
-3. Use sub-bullets (- ) for detailed findings within categories  
-4. Present information in logical anatomical order
-5. Separate normal findings from abnormal findings clearly
-6. Use precise measurements and locations when available`
+1. 🎯 EXACT FORMAT COMPLIANCE: Follow the template format character-by-character, section-by-section
+2. 📝 SECTION HEADERS: Use the EXACT headers provided in the template format
+3. 🔢 SECTION ORDER: Maintain the EXACT order of sections as shown in template
+4. 📋 COMPLETE COVERAGE: Address EVERY section mentioned in the template format
+5. 🎨 FORMATTING STYLE: Match the template's formatting style (bullet points, numbering, etc.)
+6. 📍 ANATOMICAL ORDER: Follow the systematic approach defined in the template`
 
     // Add general rules
     if (templateInstructions.general_rules && Array.isArray(templateInstructions.general_rules)) {
@@ -274,8 +281,19 @@ MANDATORY STRUCTURAL REQUIREMENTS:`
 
     prompt += `
 
-OUTPUT SCHEMA:
-${template.output_schema ? `Structure your response as JSON according to this schema:\n${JSON.stringify(template.output_schema, null, 2)}` : 'Provide a clear, professional radiology report in structured markdown format.'}
+🚨 CRITICAL OUTPUT REQUIREMENTS:
+1. START with the EXACT opening line from template format if provided
+2. Use IDENTICAL section headers as shown in template
+3. Follow IDENTICAL formatting structure (spacing, bullets, numbering)
+4. Address ALL sections mentioned in template - DO NOT skip any
+5. END with the exact closing line from template if provided
+
+⚠️ TEMPLATE COMPLIANCE CHECK:
+- Before responding, verify each section header matches template exactly
+- Ensure no sections are missing from the template format
+- Confirm formatting style matches template specifications
+
+🎯 FINAL REMINDER: Your response MUST be an exact structural match to the template format provided above.
 
 FACTUAL PRECISION GUIDELINES:`
 
@@ -328,32 +346,15 @@ Generate a complete, structured radiology report based on the provided clinical 
       console.error('Error parsing template instructions:', error)
     }
 
-    let prompt = `You are an expert radiology AI assistant. Generate professional radiology reports in this EXACT format:
+    let prompt = `🚨 CRITICAL INSTRUCTION: You are a precision radiology AI that MUST follow the template format with ABSOLUTE compliance.
 
-**Clinical Information:**
-[Patient information and clinical history]
-
-**Technique:**
-[Imaging technique and parameters]
-
-**Findings:**
-• [Finding 1]
-• [Finding 2]
-• [Finding 3]
-
-**Impression:**
-[Concise clinical impression]
-
-**Recommendations:**
-[Follow-up recommendations if needed]
-
-TEMPLATE: ${template.name}
+📋 TEMPLATE: ${template.name}
 ${template.description || ''}
 
-TEMPLATE FORMAT:
+⚠️ MANDATORY TEMPLATE FORMAT - FOLLOW EXACTLY:
 ${templateInstructions.template_format || 'Use standard radiology report format'}
 
-GENERAL RULES:`
+🔴 NON-NEGOTIABLE REQUIREMENTS:`
 
     // Add general rules
     if (templateInstructions.general_rules && Array.isArray(templateInstructions.general_rules)) {
@@ -374,8 +375,14 @@ GENERAL RULES:`
 
     prompt += `
 
-OUTPUT SCHEMA:
-${template.output_schema ? `Please structure your response as JSON according to this schema:\n${JSON.stringify(template.output_schema, null, 2)}` : 'Provide a clear, professional radiology report in markdown format.'}
+🚨 CRITICAL COMPLIANCE REQUIREMENTS:
+1. EXACT SECTION HEADERS: Use the identical headers from template format
+2. COMPLETE SECTION COVERAGE: Address EVERY section in the template
+3. IDENTICAL STRUCTURE: Match spacing, bullets, and formatting exactly
+4. SEQUENTIAL ORDER: Follow the exact order of sections as shown
+5. NO OMISSIONS: Do not skip any section mentioned in template format
+
+⚠️ BEFORE RESPONDING: Verify your output matches template format section-by-section
 
 MEDICAL GUIDELINES:`
 
@@ -411,7 +418,7 @@ Please generate a complete radiology report based on the following clinical info
 
   // Build user message from request with template context
   private buildUserMessage(request: MessageRequest): string {
-    let message = ''
+    let message = '🚨 REMEMBER: Follow the EXACT template format provided in the system prompt. Address ALL sections in the correct order.\n\n'
 
     // Add text input
     if (request.text) {
@@ -456,7 +463,7 @@ Please generate a complete radiology report based on the following clinical info
       message = 'Please generate a radiology report based on the selected template format.\n\n'
     }
 
-    message += 'Please generate a complete radiology report following the template format and rules specified above.'
+    message += '🎯 FINAL INSTRUCTION: Generate a complete radiology report that follows the EXACT template format provided in the system prompt. Ensure ALL sections are included and properly formatted. Do not skip any sections.'
 
     return message
   }
@@ -530,11 +537,13 @@ Please generate a complete radiology report based on the following clinical info
     }))
   }
 
-  // Convert structured output to markdown using template format
-  convertToMarkdown(structuredOutput: Record<string, any>, template: Template): string {
-    // Parse template instructions to get template format
-    let templateInstructions: any = {}
+  // Validate that the LLM output follows the template format
+  private validateTemplateCompliance(response: string, template: Template): { isCompliant: boolean; suggestions: string[] } {
+    const suggestions: string[] = []
+    let isCompliant = true
+
     try {
+      let templateInstructions: any = {}
       if (template.retrieval_config) {
         if (typeof template.retrieval_config === 'string') {
           templateInstructions = JSON.parse(template.retrieval_config)
@@ -542,279 +551,40 @@ Please generate a complete radiology report based on the following clinical info
           templateInstructions = template.retrieval_config
         }
       }
+
+      const templateFormat = templateInstructions.template_format || ''
+      
+      // Extract expected section headers from template format
+      const expectedSections = templateFormat.match(/^[A-Z][^:]*:/gm) || []
+      const responseSections = response.match(/^[A-Z][^:]*:/gm) || []
+      
+      // Check if all expected sections are present
+      expectedSections.forEach(section => {
+        const sectionName = section.replace(':', '')
+        if (!response.includes(sectionName)) {
+          isCompliant = false
+          suggestions.push(`Missing section: ${sectionName}`)
+        }
+      })
+
+      // Check for template opening line
+      if (templateFormat.includes('Here is the completed') && !response.includes('Here is the completed')) {
+        isCompliant = false
+        suggestions.push('Missing template opening line')
+      }
+
+      // Check for template closing line  
+      if (templateFormat.includes('Let me know if you') && !response.includes('Let me know if you')) {
+        isCompliant = false
+        suggestions.push('Missing template closing line')
+      }
+
+      return { isCompliant, suggestions }
     } catch (error) {
-      console.error('Error parsing template instructions:', error)
+      console.error('Error validating template compliance:', error)
+      return { isCompliant: true, suggestions: [] } // Assume compliant if validation fails
     }
-
-    // Start with template header
-    let markdown = `# ${template.name} Report\n\n`
-
-    // Use template-specific formatting if available
-    if (templateInstructions.template_format) {
-      // For now, use a simplified approach - in production, implement template-specific formatters
-      if (template.name.includes('MRI')) {
-        return this.convertMRIToMarkdown(structuredOutput, templateInstructions)
-      } else if (template.name.includes('Chest')) {
-        return this.convertChestXrayToMarkdown(structuredOutput, templateInstructions)
-      } else if (template.name.includes('CT Head')) {
-        return this.convertCTHeadToMarkdown(structuredOutput, templateInstructions)
-      }
-    }
-
-    // Default formatting
-    return this.convertDefaultToMarkdown(structuredOutput, template)
   }
 
-  // MRI-specific markdown converter - matches your uploaded template format
-  private convertMRIToMarkdown(output: Record<string, any>, instructions: any): string {
-    // Start with your preferred format style
-    let markdown = 'Here is the completed MRI Lumbosacral Spine Report based on your template and the provided information:\n\n'
-
-    if (output.clinical_information) {
-      markdown += `Clinical Information:\n${output.clinical_information}\n\n`
-    }
-
-    if (output.technique) {
-      markdown += `## Technique:\n${output.technique}\n\n`
-    }
-
-    if (output.comparison) {
-      markdown += `## Comparison:\n${output.comparison}\n\n`
-    }
-
-    markdown += 'Findings:\n'
-    
-    if (output.findings) {
-      if (output.findings.last_formed_disc) {
-        markdown += `${output.findings.last_formed_disc}\n\n`
-      }
-
-      if (output.findings.localizer_images) {
-        markdown += `Localizer images:\n${output.findings.localizer_images}\n\n`
-      }
-
-      if (output.findings.spinal_cord) {
-        const spinalCord = output.findings.spinal_cord.description || output.findings.spinal_cord
-        markdown += `Spinal cord:\n${spinalCord}\n\n`
-      }
-
-      if (output.findings.bones_and_joints) {
-        const bones = output.findings.bones_and_joints.description || output.findings.bones_and_joints
-        markdown += `Bones and joints:\n${bones}\n\n`
-      }
-
-      if (output.findings.thoracic_discs) {
-        const thoracic = output.findings.thoracic_discs.description || output.findings.thoracic_discs
-        markdown += `Visualized thoracic discs and disc levels:\n${thoracic}\n\n`
-      }
-
-      if (output.findings.lumbar_discs) {
-        const lumbar = output.findings.lumbar_discs.description || output.findings.lumbar_discs
-        // Format with bullet points for detailed findings
-        let lumbarFormatted = lumbar
-        
-        // Look for specific disc level mentions and format as bullet points
-        if (lumbar.includes('L1-2') || lumbar.includes('L2-3') || lumbar.includes('L3-4') || lumbar.includes('L4-5') || lumbar.includes('L5-S1')) {
-          // If it contains detailed disc analysis, keep the formatting
-          lumbarFormatted = lumbar.replace(/- At ([^.]+\.)/g, '\n- At $1')
-          lumbarFormatted = lumbarFormatted.replace(/^\n/, '') // Remove leading newline
-        }
-        
-        markdown += `Lumbar discs and disc levels:\n${lumbarFormatted}\n\n`
-      }
-
-      if (output.findings.sacrum_iliac) {
-        const sacrum = output.findings.sacrum_iliac.description || output.findings.sacrum_iliac
-        markdown += `Visualised sacrum and iliac bones:\n${sacrum}\n\n`
-      }
-
-      if (output.findings.soft_tissues) {
-        const softTissues = output.findings.soft_tissues.description || output.findings.soft_tissues
-        markdown += `Soft tissues:\n${softTissues}\n\n`
-      }
-
-      if (output.findings.other_findings) {
-        const other = output.findings.other_findings.description || output.findings.other_findings
-        markdown += `Other findings:\n${other}\n\n`
-      }
-    }
-
-    if (output.conclusion_recommendations) {
-      // Format conclusion with bullet points for key findings
-      let conclusion = output.conclusion_recommendations
-      
-      // If conclusion contains multiple points, format as bullet points
-      if (conclusion.includes('Features are most likely to represent')) {
-        // Split into main statement and bullet points
-        const parts = conclusion.split('Features are most likely to represent the following as described and discussed above')
-        if (parts.length > 1) {
-          markdown += `Conclusion/Recommendations:\nFeatures are most likely to represent the following as described and discussed above:\n`
-          
-          // Format remaining text as bullet points if it contains multiple findings
-          let findings = parts[1].trim()
-          if (findings.includes('.') && findings.length > 100) {
-            // Split into sentences and format as bullets
-            const sentences = findings.split('.').filter(s => s.trim().length > 0)
-            sentences.forEach(sentence => {
-              if (sentence.trim()) {
-                markdown += `\n- ${sentence.trim()}.`
-              }
-            })
-          } else {
-            markdown += `\n${findings}`
-          }
-        } else {
-          markdown += `Conclusion/Recommendations:\n${conclusion}`
-        }
-      } else {
-        markdown += `Conclusion/Recommendations:\n${conclusion}`
-      }
-      markdown += '\n\n'
-    }
-
-    // Add professional closing
-    markdown += 'Let me know if you\'d like to adjust or add anything.\n'
-
-    return markdown
-  }
-
-  // Chest X-ray specific markdown converter
-  private convertChestXrayToMarkdown(output: Record<string, any>, instructions: any): string {
-    let markdown = '# Chest X-Ray Report\n\n'
-
-    if (output.clinical_information) {
-      markdown += `**Clinical Information:**\n${output.clinical_information}\n\n`
-    }
-
-    if (output.technique) {
-      markdown += `**Technique:**\n${output.technique}\n\n`
-    }
-
-    if (output.comparison) {
-      markdown += `**Comparison:**\n${output.comparison}\n\n`
-    }
-
-    if (output.findings) {
-      markdown += '**Findings:**\n\n'
-
-      if (output.findings.heart) {
-        markdown += `**Heart:**\n${output.findings.heart}\n\n`
-      }
-
-      if (output.findings.lungs) {
-        markdown += '**Lungs:**\n'
-        if (typeof output.findings.lungs === 'object') {
-          if (output.findings.lungs.right_lung) {
-            markdown += `Right lung: ${output.findings.lungs.right_lung}\n`
-          }
-          if (output.findings.lungs.left_lung) {
-            markdown += `Left lung: ${output.findings.lungs.left_lung}\n`
-          }
-        } else {
-          markdown += `${output.findings.lungs}\n`
-        }
-        markdown += '\n'
-      }
-
-      if (output.findings.pleura) {
-        markdown += `**Pleura:**\n${output.findings.pleura}\n\n`
-      }
-
-      if (output.findings.bones) {
-        markdown += `**Bones:**\n${output.findings.bones}\n\n`
-      }
-
-      if (output.findings.soft_tissues) {
-        markdown += `**Soft tissues:**\n${output.findings.soft_tissues}\n\n`
-      }
-
-      if (output.findings.lines_tubes) {
-        markdown += `**Lines and tubes:**\n${output.findings.lines_tubes}\n\n`
-      }
-    }
-
-    if (output.impression) {
-      markdown += `**Impression:**\n${output.impression}\n\n`
-    }
-
-    if (output.recommendations) {
-      markdown += `**Recommendations:**\n${output.recommendations}\n\n`
-    }
-
-    return markdown
-  }
-
-  // CT Head specific markdown converter
-  private convertCTHeadToMarkdown(output: Record<string, any>, instructions: any): string {
-    let markdown = '# CT Head Report\n\n'
-
-    if (output.clinical_information) {
-      markdown += `**Clinical Information:**\n${output.clinical_information}\n\n`
-    }
-
-    if (output.technique) {
-      markdown += `**Technique:**\n${output.technique}\n\n`
-    }
-
-    if (output.comparison) {
-      markdown += `**Comparison:**\n${output.comparison}\n\n`
-    }
-
-    if (output.findings) {
-      markdown += '**Findings:**\n\n'
-
-      if (output.findings.brain_parenchyma) {
-        markdown += `**Brain parenchyma:**\n${output.findings.brain_parenchyma}\n\n`
-      }
-
-      if (output.findings.ventricles) {
-        markdown += `**Ventricles:**\n${output.findings.ventricles}\n\n`
-      }
-
-      if (output.findings.cisterns) {
-        markdown += `**Cisterns:**\n${output.findings.cisterns}\n\n`
-      }
-
-      if (output.findings.skull_bones) {
-        markdown += `**Skull and bones:**\n${output.findings.skull_bones}\n\n`
-      }
-
-      if (output.findings.soft_tissues) {
-        markdown += `**Soft tissues:**\n${output.findings.soft_tissues}\n\n`
-      }
-    }
-
-    if (output.impression) {
-      markdown += `**Impression:**\n${output.impression}\n\n`
-    }
-
-    if (output.recommendations) {
-      markdown += `**Recommendations:**\n${output.recommendations}\n\n`
-    }
-
-    return markdown
-  }
-
-  // Default markdown converter
-  private convertDefaultToMarkdown(output: Record<string, any>, template: Template): string {
-    let markdown = `# ${template.name} Report\n\n`
-
-    // Generic field mapping
-    Object.entries(output).forEach(([key, value]) => {
-      const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-      
-      if (typeof value === 'object' && value !== null) {
-        markdown += `**${label}:**\n`
-        Object.entries(value).forEach(([subKey, subValue]) => {
-          const subLabel = subKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-          markdown += `- **${subLabel}**: ${subValue}\n`
-        })
-        markdown += '\n'
-      } else {
-        markdown += `**${label}:**\n${value}\n\n`
-      }
-    })
-
-    return markdown
-  }
+  // Note: Structured JSON output conversion removed - LLM now returns markdown directly
 }

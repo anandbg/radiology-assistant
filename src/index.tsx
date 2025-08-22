@@ -476,37 +476,19 @@ app.post('/api/chats/:id/messages', async (c) => {
         )
       }
 
-      // Convert structured output to markdown if needed
+      // Use the LLM response content directly (already in markdown format)
       renderedMarkdown = llmResult.response.content
-      if (llmResult.structured_output && template.output_schema) {
-        renderedMarkdown = llmService.convertToMarkdown(llmResult.structured_output, template)
-      }
 
       // Generate citations
       citations = llmService.generateCitations(contextChunks)
     } else {
       // Fallback to local placeholder response
-      const placeholderOutput = {
-        patient_info: { age: "Unknown", sex: "Unknown" },
-        clinical_history: piiResult.sanitized_text || inputText,
-        technique: "As described",
-        findings: {
-          heart: "Assessment pending - hybrid services not configured",
-          lungs: "Assessment pending - hybrid services not configured", 
-          pleura: "Assessment pending - hybrid services not configured",
-          bones: "Assessment pending - hybrid services not configured"
-        },
-        impression: "Preliminary assessment - AI services not available",
-        recommendations: "Configure OpenAI API key for full AI report generation"
-      }
-
       renderedMarkdown = `# ${template.name}\n\n**Clinical History**: ${piiResult.sanitized_text || inputText}\n\n## Status\nDemo mode - Configure hybrid services for full AI capabilities\n\n## Next Steps\n- Set up OpenAI API key\n- Configure Supabase for RAG\n- Enable full report generation`
       
       citations = []
       llmResult = {
         response: { content: renderedMarkdown, usage: { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 } },
-        usage_event: { credits_charged: 0 },
-        structured_output: placeholderOutput
+        usage_event: { credits_charged: 0 }
       }
     }
 
@@ -514,41 +496,25 @@ app.post('/api/chats/:id/messages', async (c) => {
     let assistantResult
     
     console.log('🔍 Inserting assistant message...')
-    console.log('🔍 llmResult.structured_output type:', typeof llmResult.structured_output)
-    console.log('🔍 llmResult.structured_output value:', llmResult.structured_output)
     
     if (supabaseDB) {
       console.log('📝 Using Supabase for assistant message')
       assistantResult = await supabaseDB.insertAssistantMessage(
         chatId,
         renderedMarkdown,
-        llmResult.structured_output,
+        null, // No longer using structured output
         citations
       )
     } else if (DB) {
       console.log('📝 Using D1 for assistant message')
-      // Safe JSON serialization for D1
-      let structuredOutputJson = null
-      try {
-        if (llmResult.structured_output) {
-          if (typeof llmResult.structured_output === 'string') {
-            structuredOutputJson = llmResult.structured_output
-          } else {
-            structuredOutputJson = JSON.stringify(llmResult.structured_output)
-          }
-        }
-      } catch (jsonError) {
-        console.error('❌ Error serializing structured output:', jsonError)
-        structuredOutputJson = JSON.stringify({ error: 'Failed to serialize output' })
-      }
+      // No longer storing structured JSON output
       
       assistantResult = await DB.prepare(`
         INSERT INTO messages (chat_id, user_id, role, rendered_md, json_output, citations_json, created_at) 
-        VALUES (?, 1, 'assistant', ?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES (?, 1, 'assistant', ?, NULL, ?, CURRENT_TIMESTAMP)
       `).bind(
         chatId, 
         renderedMarkdown,
-        structuredOutputJson,
         JSON.stringify(citations || [])
       ).run()
     } else {
@@ -599,7 +565,6 @@ app.post('/api/chats/:id/messages', async (c) => {
       user_message_id: userResult.meta.last_row_id,
       assistant_message_id: assistantResult.meta.last_row_id,
       response: {
-        json_output: llmResult.structured_output ? JSON.stringify(llmResult.structured_output) : null,
         rendered_md: renderedMarkdown,
         citations: citations
       },

@@ -120,3 +120,42 @@
 .chat-messages::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
+
+/* Chat organization styles */
+.chat-item {
+  @apply transition-all duration-200;
+}
+
+.chat-item:hover {
+  @apply transform translate-x-1;
+}
+
+.recent-chats-header {
+  @apply text-green-600;
+}
+
+.older-chats-header {
+  @apply text-amber-600;
+}
+
+#toggle-older-chats {
+  @apply transition-all duration-200;
+}
+
+#toggle-older-chats:hover {
+  @apply bg-gray-100;
+}
+
+#older-chats-list {
+  @apply transition-all duration-300 ease-in-out;
+}
+
+/* Visual distinction for older chats */
+#older-chats-list .chat-item {
+  @apply opacity-75 hover:opacity-100;
+}
+
+/* Collapsible arrow animation */
+#older-chats-arrow {
+  @apply transition-transform duration-200;
+}

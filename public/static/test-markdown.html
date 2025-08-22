@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Markdown Rendering</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow">
+        <h1 class="text-2xl font-bold mb-4">🔍 Test Markdown Rendering</h1>
+        
+        <button onclick="testMarkdown()" class="bg-blue-500 text-white px-4 py-2 rounded mb-4">
+            Test Markdown Function
+        </button>
+        
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <h2 class="text-lg font-semibold mb-2">Input (Raw Markdown)</h2>
+                <textarea id="input" class="w-full h-64 p-3 border rounded font-mono text-sm">**Clinical Information:**
+Patient is a 65-year-old male with a history of chronic obstructive pulmonary disease presenting with increased shortness of breath and cough.
+
+**Technique:**
+Standard posterior-anterior and lateral chest radiographs were obtained without contrast.
+
+**Findings:**
+
+**Heart:**
+• Heart size is within normal limits.
+
+**Lungs:**
+• Right lung shows increased interstitial markings consistent with chronic changes.
+• Left lung fields are clear without evidence of consolidation.</textarea>
+            </div>
+            
+            <div>
+                <h2 class="text-lg font-semibold mb-2">Output (Rendered HTML)</h2>
+                <div id="output" class="w-full h-64 p-3 border rounded bg-gray-50 overflow-auto"></div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <h2 class="text-lg font-semibold mb-2">HTML Source</h2>
+            <pre id="html-source" class="w-full p-3 border rounded bg-gray-900 text-green-400 text-xs overflow-auto max-h-32"></pre>
+        </div>
+    </div>
+    
+    <script>
+        // Copy the exact markdownToHtml function from app.js
+        function markdownToHtml(markdown) {
+            if (!markdown || typeof markdown !== 'string') {
+                return '';
+            }
+            
+            console.log('🔧 Converting markdown:', markdown.substring(0, 200) + '...');
+            
+            // Enhanced markdown to HTML conversion for medical reports
+            let html = markdown
+                // First escape any existing HTML to prevent conflicts
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                
+                // Handle headers (must come before other formatting)
+                .replace(/^### (.*$)/gim, '<h3 class="text-base font-semibold mb-2 mt-4 text-gray-800">$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2 class="text-lg font-bold mb-3 mt-6 text-gray-900">$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1 class="text-xl font-bold mb-4 mt-6 text-gray-900">$1</h1>')
+                
+                // Handle bold text **bold**
+                .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
+                
+                // Handle bullet points and lists
+                .replace(/^[\s]*[•\-\*]\s+(.*$)/gim, '<li class="ml-6 mb-1 list-disc list-inside text-gray-700">$1</li>')
+                
+                // Handle medical report section headers (like "Clinical Information:" at start of line)
+                .replace(/^([A-Z][A-Za-z\s\/]+):\s*$/gim, '<h3 class="text-base font-semibold mb-2 mt-4 text-blue-800">$1:</h3>')
+                
+                // Handle field labels (like "Technique:" followed by content)
+                .replace(/^([A-Z][A-Za-z\s\/]+):\s*(.+)$/gim, '<div class="mb-2"><span class="font-semibold text-gray-800">$1:</span> <span class="text-gray-700">$2</span></div>')
+                
+                // Convert paragraphs (double line breaks)
+                .replace(/\n\s*\n/g, '</p><p class="mb-3 text-gray-700">')
+                
+                // Convert single line breaks to <br>
+                .replace(/\n/g, '<br>')
+                
+                // Wrap in paragraph tags
+                .replace(/^(.+)/, '<p class="mb-3 text-gray-700">$1')
+                .replace(/(.+)$/, '$1</p>');
+            
+            console.log('✅ Converted HTML:', html.substring(0, 200) + '...');
+            return html;
+        }
+        
+        function testMarkdown() {
+            const input = document.getElementById('input').value;
+            const output = document.getElementById('output');
+            const htmlSource = document.getElementById('html-source');
+            
+            console.log('Input:', input);
+            
+            const result = markdownToHtml(input);
+            console.log('Result:', result);
+            
+            output.innerHTML = result;
+            htmlSource.textContent = result;
+        }
+        
+        // Auto-test on load
+        window.onload = () => testMarkdown();
+    </script>
+</body>
+</html>

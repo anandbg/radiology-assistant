@@ -86,6 +86,8 @@ class RadiologyAssistant {
         this.toggleRecording();
       } else if (e.target.id === 'new-chat-button') {
         this.createNewChat();
+      } else if (e.target.id === 'toggle-older-chats' || e.target.closest('#toggle-older-chats')) {
+        this.toggleOlderChats();
       } else if (e.target.closest('.template-card')) {
         const templateId = e.target.closest('.template-card').dataset.templateId;
         this.selectTemplate(parseInt(templateId));
@@ -172,9 +174,31 @@ class RadiologyAssistant {
 
             <!-- Chat History -->
             <div class="bg-white rounded-lg shadow-sm p-4">
-              <h3 class="font-semibold text-gray-900 mb-3">Recent Chats</h3>
-              <div id="chats-list" class="space-y-2">
-                <div class="text-gray-500 text-sm">Loading chats...</div>
+              <h3 class="font-semibold text-gray-900 mb-3">Chat History</h3>
+              
+              <!-- Recent Chats -->
+              <div class="mb-4">
+                <h4 class="text-sm font-medium recent-chats-header mb-2 flex items-center">
+                  <i class="fas fa-clock mr-2"></i>
+                  Recent Chats
+                </h4>
+                <div id="recent-chats-list" class="space-y-1">
+                  <div class="text-gray-500 text-sm">Loading chats...</div>
+                </div>
+              </div>
+              
+              <!-- Older Chats -->
+              <div id="older-chats-section" class="hidden">
+                <button id="toggle-older-chats" class="w-full text-left text-sm font-medium older-chats-header mb-2 flex items-center justify-between py-1 px-2 rounded">
+                  <span class="flex items-center">
+                    <i class="fas fa-archive mr-2"></i>
+                    Older Chats
+                  </span>
+                  <i id="older-chats-arrow" class="fas fa-chevron-down text-gray-400 text-xs"></i>
+                </button>
+                <div id="older-chats-list" class="space-y-1 hidden">
+                  <!-- Older chats will be populated here -->
+                </div>
               </div>
             </div>
           </div>
@@ -294,30 +318,38 @@ class RadiologyAssistant {
       const chats = response.data.chats;
       console.log(`✅ Loaded ${chats.length} chats:`, chats);
       
-      const chatsList = document.getElementById('chats-list');
-      console.log('📍 chats-list element:', chatsList);
+      const recentChatsList = document.getElementById('recent-chats-list');
+      const olderChatsList = document.getElementById('older-chats-list');
+      const olderChatsSection = document.getElementById('older-chats-section');
       
-      if (!chatsList) {
-        console.error('❌ chats-list element not found!');
+      if (!recentChatsList || !olderChatsList) {
+        console.error('❌ Chat list elements not found!');
         return;
       }
       
       if (chats.length === 0) {
-        chatsList.innerHTML = '<div class="text-gray-500 text-sm">No chats yet</div>';
+        recentChatsList.innerHTML = '<div class="text-gray-500 text-sm">No chats yet</div>';
+        olderChatsSection.classList.add('hidden');
         return;
       }
 
-      // Check if dayjs is available
+      // Separate recent (latest 5) and older chats
+      const recentChats = chats.slice(0, 5);
+      const olderChats = chats.slice(5);
+      
+      console.log(`📊 Recent: ${recentChats.length}, Older: ${olderChats.length}`);
+
+      // Render recent chats
       if (typeof dayjs === 'undefined') {
         console.error('❌ dayjs is not loaded!');
-        chatsList.innerHTML = chats.map(chat => `
+        recentChatsList.innerHTML = recentChats.map(chat => `
           <div class="chat-item p-2 hover:bg-gray-50 rounded cursor-pointer" data-chat-id="${chat.id}">
             <div class="font-medium text-sm truncate">${chat.title || 'Untitled'}</div>
             <div class="text-xs text-gray-500">${chat.updated_at}</div>
           </div>
         `).join('');
       } else {
-        chatsList.innerHTML = chats.map(chat => `
+        recentChatsList.innerHTML = recentChats.map(chat => `
           <div class="chat-item p-2 hover:bg-gray-50 rounded cursor-pointer" data-chat-id="${chat.id}">
             <div class="font-medium text-sm truncate">${chat.title || 'Untitled'}</div>
             <div class="text-xs text-gray-500">${dayjs(chat.updated_at).format('MMM D, h:mm A')}</div>
@@ -325,13 +357,72 @@ class RadiologyAssistant {
         `).join('');
       }
       
-      console.log(`✅ Rendered ${chats.length} chat items`);
+      // Handle older chats section
+      if (olderChats.length > 0) {
+        olderChatsSection.classList.remove('hidden');
+        
+        // Render older chats
+        if (typeof dayjs === 'undefined') {
+          olderChatsList.innerHTML = olderChats.map(chat => `
+            <div class="chat-item p-2 hover:bg-gray-50 rounded cursor-pointer" data-chat-id="${chat.id}">
+              <div class="font-medium text-sm truncate">${chat.title || 'Untitled'}</div>
+              <div class="text-xs text-gray-500">${chat.updated_at}</div>
+            </div>
+          `).join('');
+        } else {
+          olderChatsList.innerHTML = olderChats.map(chat => `
+            <div class="chat-item p-2 hover:bg-gray-50 rounded cursor-pointer" data-chat-id="${chat.id}">
+              <div class="font-medium text-sm truncate">${chat.title || 'Untitled'}</div>
+              <div class="text-xs text-gray-500">${dayjs(chat.updated_at).format('MMM D, h:mm A')}</div>
+            </div>
+          `).join('');
+        }
+        
+        // Update the toggle button to show count
+        const toggleButton = document.querySelector('#toggle-older-chats span');
+        if (toggleButton) {
+          toggleButton.innerHTML = `
+            <i class="fas fa-archive mr-2 text-gray-400"></i>
+            Older Chats (${olderChats.length})
+          `;
+        }
+      } else {
+        olderChatsSection.classList.add('hidden');
+      }
+      
+      console.log(`✅ Rendered ${recentChats.length} recent and ${olderChats.length} older chat items`);
     } catch (error) {
       console.error('❌ Error loading chats:', error);
-      const chatsList = document.getElementById('chats-list');
-      if (chatsList) {
-        chatsList.innerHTML = '<div class="text-red-500 text-sm">Error loading chats</div>';
+      const recentChatsList = document.getElementById('recent-chats-list');
+      if (recentChatsList) {
+        recentChatsList.innerHTML = '<div class="text-red-500 text-sm">Error loading chats</div>';
       }
+    }
+  }
+
+  toggleOlderChats() {
+    const olderChatsList = document.getElementById('older-chats-list');
+    const arrow = document.getElementById('older-chats-arrow');
+    
+    if (!olderChatsList || !arrow) {
+      console.error('❌ Older chats elements not found!');
+      return;
+    }
+    
+    const isHidden = olderChatsList.classList.contains('hidden');
+    
+    if (isHidden) {
+      // Show older chats
+      olderChatsList.classList.remove('hidden');
+      arrow.classList.remove('fa-chevron-down');
+      arrow.classList.add('fa-chevron-up');
+      console.log('📝 Expanded older chats');
+    } else {
+      // Hide older chats
+      olderChatsList.classList.add('hidden');
+      arrow.classList.remove('fa-chevron-up');
+      arrow.classList.add('fa-chevron-down');
+      console.log('🗑️ Collapsed older chats');
     }
   }
 
@@ -457,7 +548,7 @@ class RadiologyAssistant {
             <div class="prose prose-sm max-w-none">
               ${message.rendered_md ? this.markdownToHtml(message.rendered_md) : ''}
             </div>
-            ${message.json_output ? this.renderJsonOutput(message.json_output) : ''}
+
             ${message.rendered_md ? this.renderDownloadButtons(message) : ''}
           </div>
         `;
@@ -1908,11 +1999,7 @@ class RadiologyAssistant {
             <i class="fas fa-download mr-1"></i>
             Download .md
           </button>
-          <button onclick="radiologyApp.downloadAsJson(${message.id}, '${this.escapeForAttribute(message.text || 'report')}')" 
-                  class="inline-flex items-center px-3 py-1 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-md transition-colors">
-            <i class="fas fa-download mr-1"></i>
-            Download .json
-          </button>
+
           <button onclick="radiologyApp.copyToClipboard('${message.id}-content')" 
                   class="inline-flex items-center px-3 py-1 text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
             <i class="fas fa-copy mr-1"></i>
@@ -1923,22 +2010,7 @@ class RadiologyAssistant {
     `;
   }
 
-  renderJsonOutput(jsonOutput) {
-    try {
-      const data = JSON.parse(jsonOutput);
-      return `
-        <details class="mt-4">
-          <summary class="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
-            <i class="fas fa-code mr-1"></i>
-            View Structured Data
-          </summary>
-          <pre class="report-json mt-2 text-xs overflow-x-auto">${JSON.stringify(data, null, 2)}</pre>
-        </details>
-      `;
-    } catch (error) {
-      return '';
-    }
-  }
+
 
   markdownToHtml(markdown) {
     // Simple markdown to HTML conversion
@@ -2002,50 +2074,7 @@ ${message.rendered_md}
     }
   }
 
-  // Download assistant message as JSON file
-  async downloadAsJson(messageId, filename) {
-    try {
-      console.log('📥 Downloading JSON for message:', messageId);
-      
-      // Find the message in current chat
-      const response = await axios.get(`/api/chats/${this.currentChatId}/messages`);
-      const message = response.data.messages.find(msg => msg.id === messageId);
-      
-      if (!message) {
-        this.showError('Message not found');
-        return;
-      }
 
-      // Create comprehensive JSON export
-      const jsonExport = {
-        metadata: {
-          messageId: message.id,
-          chatId: this.currentChatId,
-          generated: new Date(message.created_at).toISOString(),
-          template: message.template_name || 'Unknown',
-          exportedAt: new Date().toISOString()
-        },
-        content: {
-          markdownReport: message.rendered_md || null,
-          structuredData: message.json_output ? JSON.parse(message.json_output) : null,
-          citations: message.citations_json ? JSON.parse(message.citations_json) : [],
-        },
-        original: {
-          userInput: message.text || '',
-          piiDetected: !!message.pii_detected,
-          attachments: message.attachments_json ? JSON.parse(message.attachments_json) : []
-        }
-      };
-
-      const timestamp = new Date(message.created_at).toLocaleDateString();
-      this.downloadFile(JSON.stringify(jsonExport, null, 2), `${this.sanitizeFilename(filename)}-${timestamp}.json`, 'application/json');
-      console.log('✅ JSON download initiated');
-      
-    } catch (error) {
-      console.error('❌ Error downloading JSON:', error);
-      this.showError('Failed to download JSON file');
-    }
-  }
 
   // Copy message content to clipboard
   async copyToClipboard(messageId) {

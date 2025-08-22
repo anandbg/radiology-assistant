@@ -186,7 +186,6 @@ export interface LLMRequest {
 
 export interface LLMResponse {
   content: string
-  structured_output?: Record<string, any>
   usage: {
     prompt_tokens: number
     completion_tokens: number
