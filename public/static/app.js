@@ -27,7 +27,9 @@ class RadiologyAssistant {
       const response = await axios.get('/api/templates');
       this.templates = response.data.templates;
       if (this.templates.length > 0 && !this.selectedTemplate) {
-        this.selectedTemplate = this.templates[0];
+        // Default to MRI Lumbar Spine template (most comprehensive)
+        const mriTemplate = this.templates.find(t => t.name.includes('MRI Lumbar Spine'));
+        this.selectedTemplate = mriTemplate || this.templates[0];
       }
     } catch (error) {
       console.error('Error loading templates:', error);

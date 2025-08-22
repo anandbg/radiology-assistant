@@ -49,7 +49,7 @@ export class SupabaseDB {
       .from('templates')
       .select('*')
       .eq('is_active', true)
-      .order('name')
+      .order('id', { ascending: true }) // Order by ID to get MRI Lumbar Spine (id=1) first
     
     if (error) throw error
     return data?.map(t => ({

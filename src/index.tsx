@@ -97,7 +97,13 @@ app.get('/api/templates', async (c) => {
         FROM templates t 
         LEFT JOIN profiles p ON t.created_by = p.id 
         WHERE t.is_active = TRUE 
-        ORDER BY t.name
+        ORDER BY 
+          CASE 
+            WHEN t.name LIKE '%MRI Lumbar Spine%' THEN 1
+            WHEN t.name LIKE '%Chest X-Ray%' THEN 2
+            WHEN t.name LIKE '%CT Head%' THEN 3
+            ELSE 4
+          END, t.name
       `).all()
       templates = results
     } else {
