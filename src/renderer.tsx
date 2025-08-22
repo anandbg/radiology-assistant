@@ -10,8 +10,40 @@ export const renderer = jsxRenderer(({ children }) => {
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="icon" type="image/x-icon" href="/favicon.ico" />
         
+        {/* Professional Google Fonts */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+        
         {/* Tailwind CSS */}
         <script src="https://cdn.tailwindcss.com"></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              tailwind.config = {
+                theme: {
+                  extend: {
+                    fontFamily: {
+                      'sans': ['Inter', 'system-ui', 'sans-serif'],
+                      'mono': ['JetBrains Mono', 'Consolas', 'monospace'],
+                    },
+                    colors: {
+                      'medical': {
+                        50: '#f0f9ff',
+                        100: '#e0f2fe',
+                        500: '#0ea5e9',
+                        600: '#0284c7',
+                        700: '#0369a1',
+                        800: '#075985',
+                        900: '#0c4a6e',
+                      }
+                    }
+                  }
+                }
+              }
+            `,
+          }}
+        />
         
         {/* Font Awesome Icons */}
         <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet" />

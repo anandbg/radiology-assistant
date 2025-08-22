@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Upload Test - Radiology Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="max-w-4xl mx-auto p-6">
+        <div class="bg-white rounded-lg shadow-sm border p-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">🎤 Audio Upload Test</h1>
+            <p class="text-gray-600 mb-8">Test the enhanced audio file upload functionality with multiple formats support</p>
+
+            <!-- Audio Upload Area -->
+            <div class="mb-8">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Upload Audio Files</h2>
+                <div id="upload-area" class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 cursor-pointer" onclick="document.getElementById('audio-input').click()">
+                    <input type="file" id="audio-input" multiple accept=".mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.mp4,.mov" class="hidden">
+                    <div class="flex flex-col items-center space-y-3">
+                        <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-cloud-upload-alt text-blue-600 text-2xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-lg font-medium text-gray-700">Upload Audio Files</p>
+                            <p class="text-gray-500">MP3, WAV, M4A, OGG, AAC, FLAC, MP4, MOV • Drag & drop or click</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Results -->
+            <div id="results" class="space-y-4">
+                <!-- Results will appear here -->
+            </div>
+
+            <!-- Format Support Info -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                <h3 class="text-lg font-semibold text-blue-800 mb-3">🔊 Supported Audio Formats</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-check text-green-600"></i>
+                        <span class="text-sm font-medium">MP3</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-check text-green-600"></i>
+                        <span class="text-sm font-medium">WAV</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-check text-green-600"></i>
+                        <span class="text-sm font-medium">M4A</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-check text-green-600"></i>
+                        <span class="text-sm font-medium">OGG</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-check text-green-600"></i>
+                        <span class="text-sm font-medium">AAC</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-check text-green-600"></i>
+                        <span class="text-sm font-medium">FLAC</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-check text-green-600"></i>
+                        <span class="text-sm font-medium">MP4 (audio)</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-check text-green-600"></i>
+                        <span class="text-sm font-medium">WebM</span>
+                    </div>
+                </div>
+                
+                <div class="mt-4 p-4 bg-white border border-blue-200 rounded-lg">
+                    <h4 class="font-semibold text-blue-800 mb-2">✨ Features</h4>
+                    <ul class="text-sm text-blue-700 space-y-1">
+                        <li>• File size limit: 100MB for audio files</li>
+                        <li>• Automatic format detection and validation</li>
+                        <li>• Audio preview with browser controls</li>
+                        <li>• Automatic transcription via Whisper API</li>
+                        <li>• Drag & drop support</li>
+                        <li>• Progress indicators and error handling</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let uploadedFiles = [];
+
+        // File input change handler
+        document.getElementById('audio-input').addEventListener('change', (e) => {
+            handleFileUpload(e.target.files);
+        });
+
+        // Drag and drop handlers
+        const uploadArea = document.getElementById('upload-area');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('border-blue-400', 'bg-blue-50');
+        });
+
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('border-blue-400', 'bg-blue-50');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('border-blue-400', 'bg-blue-50');
+            handleFileUpload(e.dataTransfer.files);
+        });
+
+        async function handleFileUpload(files) {
+            if (!files || files.length === 0) return;
+
+            const resultsContainer = document.getElementById('results');
+
+            for (let file of Array.from(files)) {
+                try {
+                    // Create result card
+                    const resultCard = createResultCard(file);
+                    resultsContainer.appendChild(resultCard);
+
+                    // Validate file
+                    if (!isAudioFile(file)) {
+                        updateResult(resultCard, 'error', 'Not an audio file. Please select MP3, WAV, M4A, OGG, AAC, FLAC, MP4, or WebM files.');
+                        continue;
+                    }
+
+                    if (file.size > 100 * 1024 * 1024) { // 100MB limit
+                        updateResult(resultCard, 'error', `File size exceeds 100MB limit (${(file.size / (1024 * 1024)).toFixed(1)}MB)`);
+                        continue;
+                    }
+
+                    // Show uploading status
+                    updateResult(resultCard, 'uploading', 'Uploading to server...');
+
+                    // Upload file
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const response = await axios.post('/api/files/upload', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                        onUploadProgress: (progressEvent) => {
+                            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                            updateResult(resultCard, 'uploading', `Uploading... ${percentCompleted}%`);
+                        }
+                    });
+
+                    // Success
+                    updateResult(resultCard, 'success', 'Upload successful! Audio preview available.');
+                    addAudioPreview(resultCard, response.data);
+                    uploadedFiles.push(response.data);
+
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    updateResult(resultCard, 'error', `Upload failed: ${error.response?.data?.error || error.message}`);
+                }
+            }
+        }
+
+        function isAudioFile(file) {
+            const audioExtensions = ['mp3', 'wav', 'm4a', 'ogg', 'webm', 'aac', 'flac', 'mp4', 'mov'];
+            const audioMimeTypes = ['audio/', 'video/mp4', 'video/quicktime'];
+            
+            const extension = file.name.split('.').pop().toLowerCase();
+            const hasValidExtension = audioExtensions.includes(extension);
+            const hasValidMimeType = audioMimeTypes.some(type => file.type.startsWith(type));
+            
+            return hasValidExtension || hasValidMimeType;
+        }
+
+        function createResultCard(file) {
+            const card = document.createElement('div');
+            card.className = 'bg-white border rounded-lg p-4 shadow-sm';
+            card.innerHTML = `
+                <div class="flex items-start space-x-3">
+                    <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-volume-up text-gray-600"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-medium text-gray-800 truncate">${file.name}</h3>
+                        <p class="text-sm text-gray-500">${(file.size / (1024 * 1024)).toFixed(2)} MB • ${file.type || 'Unknown type'}</p>
+                        <div class="mt-2">
+                            <div class="status-container">
+                                <span class="text-sm text-gray-600">Preparing...</span>
+                            </div>
+                        </div>
+                        <div class="preview-container mt-3 hidden">
+                            <!-- Audio preview will be added here -->
+                        </div>
+                    </div>
+                </div>
+            `;
+            return card;
+        }
+
+        function updateResult(card, status, message) {
+            const statusContainer = card.querySelector('.status-container');
+            
+            let icon, color, bgColor;
+            switch (status) {
+                case 'uploading':
+                    icon = 'fa-spinner fa-spin';
+                    color = 'text-blue-600';
+                    bgColor = 'bg-blue-50';
+                    break;
+                case 'success':
+                    icon = 'fa-check';
+                    color = 'text-green-600';
+                    bgColor = 'bg-green-50';
+                    break;
+                case 'error':
+                    icon = 'fa-times';
+                    color = 'text-red-600';
+                    bgColor = 'bg-red-50';
+                    break;
+                default:
+                    icon = 'fa-info';
+                    color = 'text-gray-600';
+                    bgColor = 'bg-gray-50';
+            }
+
+            statusContainer.innerHTML = `
+                <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full ${bgColor}">
+                    <i class="fas ${icon} ${color}"></i>
+                    <span class="text-sm ${color}">${message}</span>
+                </div>
+            `;
+        }
+
+        function addAudioPreview(card, uploadData) {
+            const previewContainer = card.querySelector('.preview-container');
+            previewContainer.classList.remove('hidden');
+            
+            const audioUrl = uploadData.url || `/api/files/${uploadData.file_key}`;
+            
+            previewContainer.innerHTML = `
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-medium text-gray-800">Audio Preview</h4>
+                        <span class="text-xs text-gray-500">File Key: ${uploadData.file_key}</span>
+                    </div>
+                    <audio controls class="w-full mb-3">
+                        <source src="${audioUrl}" type="audio/*">
+                        Your browser does not support the audio element.
+                    </audio>
+                    <div class="bg-blue-50 border border-blue-200 rounded p-3">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-microphone text-blue-600"></i>
+                            <p class="text-sm text-blue-700"><strong>Ready for transcription:</strong> This audio file can be automatically transcribed when used in a chat message.</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Initialize
+        console.log('🎤 Audio Upload Test Page Ready');
+        console.log('Supported formats: MP3, WAV, M4A, OGG, WebM, AAC, FLAC, MP4, MOV');
+    </script>
+</body>
+</html>

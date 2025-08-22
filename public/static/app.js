@@ -264,14 +264,14 @@ class RadiologyAssistant {
                 <div class="border-t bg-gray-50 chat-input p-4">
                   <!-- Professional File Upload Area -->
                   <div class="file-upload-area mb-6 bg-gradient-to-br from-slate-50 to-blue-50 border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 cursor-pointer group" onclick="document.getElementById('file-input').click()">
-                    <input type="file" id="file-input" multiple accept=".pdf,.docx,.png,.jpg,.jpeg,.dcm" class="hidden">
+                    <input type="file" id="file-input" multiple accept=".pdf,.docx,.png,.jpg,.jpeg,.dcm,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.mp4,.mov,.avi" class="hidden">
                     <div class="flex flex-col items-center space-y-3">
                       <div class="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center group-hover:shadow-md transition-shadow">
                         <i class="fas fa-cloud-upload-alt text-blue-600 text-xl"></i>
                       </div>
                       <div>
-                        <p class="text-slate-700 font-medium">Upload Medical Files</p>
-                        <p class="text-slate-500 text-sm mt-1">DICOM, PDF, DOCX, Images • Drag & drop or click</p>
+                        <p class="text-slate-700 font-medium">Upload Medical Files & Audio</p>
+                        <p class="text-slate-500 text-sm mt-1">DICOM, PDF, DOCX, Images, Audio (MP3, WAV, M4A, OGG) • Drag & drop or click</p>
                       </div>
                     </div>
                   </div>
@@ -1933,14 +1933,25 @@ class RadiologyAssistant {
     
     for (let file of Array.from(files)) {
       try {
-        // Validate file
-        if (file.size > 50 * 1024 * 1024) { // 50MB limit
-          this.showError(`File ${file.name} exceeds 50MB limit`);
+        // Detect file type
+        const isAudioFile = this.isAudioFile(file);
+        const isVideoFile = this.isVideoFile(file);
+        
+        // Validate file size (audio files can be larger)
+        const sizeLimit = isAudioFile || isVideoFile ? 100 * 1024 * 1024 : 50 * 1024 * 1024; // 100MB for audio/video, 50MB for others
+        if (file.size > sizeLimit) {
+          this.showError(`File ${file.name} exceeds ${sizeLimit / (1024 * 1024)}MB limit`);
           continue;
         }
 
-        // Show upload progress
-        this.showUploadProgress(file.name);
+        // Validate audio file formats
+        if (isAudioFile && !this.validateAudioFormat(file)) {
+          this.showError(`Audio format not supported for ${file.name}. Please use MP3, WAV, M4A, OGG, AAC, or FLAC.`);
+          continue;
+        }
+
+        // Show upload progress with file type indication
+        this.showUploadProgress(file.name, isAudioFile ? 'audio' : isVideoFile ? 'video' : 'document');
         
         // Upload file
         const formData = new FormData();
@@ -1950,26 +1961,73 @@ class RadiologyAssistant {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         
+        // Add file type metadata to the attachment
+        const attachment = response.data.attachment;
+        attachment.file_type = isAudioFile ? 'audio' : isVideoFile ? 'video' : 'document';
+        attachment.can_preview = isAudioFile || isVideoFile;
+        
         // Add to uploaded files
-        this.uploadedFiles.push(response.data.attachment);
+        this.uploadedFiles.push(attachment);
+        
+        // If it's an audio file, offer transcription
+        if (isAudioFile) {
+          this.offerAudioTranscription(file, attachment);
+        }
         
         // Update UI
         this.updateFileList();
-        console.log(`Uploaded ${file.name}`);
+        console.log(`✅ Uploaded ${file.name} (${attachment.file_type})`);
         
       } catch (error) {
         console.error('Upload error:', error);
-        this.showError(`Failed to upload ${file.name}`);
+        this.showError(`Failed to upload ${file.name}: ${error.response?.data?.error || error.message}`);
       }
     }
   }
 
-  showUploadProgress(filename) {
-    // Simple progress indicator
+  isAudioFile(file) {
+    const audioExtensions = ['mp3', 'wav', 'm4a', 'ogg', 'webm', 'aac', 'flac'];
+    const audioMimeTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/flac', 'audio/x-flac'];
+    
+    const extension = file.name.split('.').pop().toLowerCase();
+    return audioExtensions.includes(extension) || audioMimeTypes.some(type => file.type.startsWith(type));
+  }
+
+  isVideoFile(file) {
+    const videoExtensions = ['mp4', 'mov', 'avi', 'webm', 'mkv'];
+    const videoMimeTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/x-matroska'];
+    
+    const extension = file.name.split('.').pop().toLowerCase();
+    return videoExtensions.includes(extension) || videoMimeTypes.some(type => file.type.startsWith(type));
+  }
+
+  validateAudioFormat(file) {
+    // More strict validation for audio files
+    const supportedFormats = ['mp3', 'wav', 'm4a', 'ogg', 'aac', 'flac'];
+    const extension = file.name.split('.').pop().toLowerCase();
+    return supportedFormats.includes(extension);
+  }
+
+  async offerAudioTranscription(file, attachment) {
+    // Show a notification that the audio can be transcribed
+    this.showInfo(`🎤 Audio file uploaded: ${file.name}. Click "Send Message" to include transcription in your analysis.`);
+  }
+
+  showUploadProgress(filename, fileType = 'document') {
+    // Progress indicator with file type
     const container = document.querySelector('.file-upload-area');
+    const icon = fileType === 'audio' ? 'fa-volume-up' : fileType === 'video' ? 'fa-video' : 'fa-file';
+    const color = fileType === 'audio' ? 'text-green-500' : fileType === 'video' ? 'text-purple-500' : 'text-blue-500';
+    
     container.innerHTML = `
-      <i class="fas fa-spinner fa-spin text-blue-500 text-xl mb-2"></i>
-      <p class="text-blue-600 text-sm">Uploading ${filename}...</p>
+      <div class="flex flex-col items-center space-y-2">
+        <div class="flex items-center space-x-2">
+          <i class="fas fa-spinner fa-spin ${color} text-lg"></i>
+          <i class="fas ${icon} ${color} text-lg"></i>
+        </div>
+        <p class="${color.replace('text-', 'text-').replace('-500', '-600')} text-sm font-medium">Uploading ${fileType} file...</p>
+        <p class="text-slate-500 text-xs">${filename}</p>
+      </div>
     `;
   }
 
@@ -1978,29 +2036,65 @@ class RadiologyAssistant {
     
     if (this.uploadedFiles.length === 0) {
       container.innerHTML = `
-        <i class="fas fa-upload text-gray-400 text-xl mb-2"></i>
-        <p class="text-gray-600 text-sm">Click or drag files here (PDF, DOCX, Images)</p>
+        <div class="flex flex-col items-center space-y-3">
+          <div class="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center group-hover:shadow-md transition-shadow">
+            <i class="fas fa-cloud-upload-alt text-blue-600 text-xl"></i>
+          </div>
+          <div>
+            <p class="text-slate-700 font-medium">Upload Medical Files & Audio</p>
+            <p class="text-slate-500 text-sm mt-1">DICOM, PDF, DOCX, Images, Audio (MP3, WAV, M4A, OGG) • Drag & drop or click</p>
+          </div>
+        </div>
       `;
       return;
     }
 
     container.innerHTML = `
-      <div class="space-y-2">
-        ${this.uploadedFiles.map((file, index) => `
-          <div class="flex items-center justify-between bg-green-50 border border-green-200 rounded p-2">
-            <div class="flex items-center space-x-2">
-              <i class="fas fa-file text-green-600"></i>
-              <span class="text-sm text-green-700">${file.name}</span>
-            </div>
-            <button onclick="radiologyApp.removeFile(${index})" class="text-red-500 hover:text-red-700">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
-        `).join('')}
-        <div class="text-center mt-2">
+      <div class="space-y-3">
+        <div class="text-center">
+          <p class="text-sm font-medium text-slate-700 mb-2">Uploaded Files (${this.uploadedFiles.length})</p>
+        </div>
+        <div class="space-y-2 max-h-32 overflow-y-auto">
+          ${this.uploadedFiles.map((file, index) => {
+            const fileType = file.file_type || 'document';
+            const icon = fileType === 'audio' ? 'fa-volume-up' : fileType === 'video' ? 'fa-video' : 'fa-file-alt';
+            const bgColor = fileType === 'audio' ? 'bg-green-50 border-green-200' : fileType === 'video' ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200';
+            const textColor = fileType === 'audio' ? 'text-green-700' : fileType === 'video' ? 'text-purple-700' : 'text-blue-700';
+            const iconColor = fileType === 'audio' ? 'text-green-600' : fileType === 'video' ? 'text-purple-600' : 'text-blue-600';
+            
+            return `
+              <div class="flex items-center justify-between ${bgColor} border rounded-lg p-3">
+                <div class="flex items-center space-x-3 flex-1 min-w-0">
+                  <i class="fas ${icon} ${iconColor} flex-shrink-0"></i>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium ${textColor} truncate">${file.name}</p>
+                    ${fileType === 'audio' ? `<p class="text-xs text-green-600 mt-1"><i class="fas fa-microphone mr-1"></i>Will be transcribed</p>` : ''}
+                    ${file.can_preview ? `<p class="text-xs text-slate-500 mt-1">Preview available</p>` : ''}
+                  </div>
+                </div>
+                <div class="flex items-center space-x-2 flex-shrink-0">
+                  ${file.can_preview ? `
+                    <button onclick="radiologyApp.previewFile(${index})" 
+                            class="text-slate-500 hover:text-slate-700 text-sm" 
+                            title="Preview ${fileType}">
+                      <i class="fas fa-eye"></i>
+                    </button>
+                  ` : ''}
+                  <button onclick="radiologyApp.removeFile(${index})" 
+                          class="text-red-500 hover:text-red-700 text-sm" 
+                          title="Remove file">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        <div class="text-center pt-2 border-t border-slate-200">
           <button onclick="document.getElementById('file-input').click()" 
-                  class="text-blue-600 hover:text-blue-800 text-sm">
-            + Add more files
+                  class="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center space-x-1 mx-auto">
+            <i class="fas fa-plus text-xs"></i>
+            <span>Add more files</span>
           </button>
         </div>
       </div>
@@ -2010,6 +2104,97 @@ class RadiologyAssistant {
   removeFile(index) {
     this.uploadedFiles.splice(index, 1);
     this.updateFileList();
+  }
+
+  previewFile(index) {
+    const file = this.uploadedFiles[index];
+    if (!file || !file.can_preview) return;
+
+    // Create modal for preview
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        document.body.removeChild(modal);
+      }
+    };
+
+    let previewContent = '';
+    if (file.file_type === 'audio') {
+      previewContent = `
+        <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-slate-800">Audio Preview</h3>
+            <button onclick="document.body.removeChild(this.closest('.fixed'))" class="text-slate-500 hover:text-slate-700">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="text-center mb-4">
+            <i class="fas fa-volume-up text-green-600 text-3xl mb-2"></i>
+            <p class="text-sm font-medium text-slate-700">${file.name}</p>
+          </div>
+          <audio controls class="w-full mb-4">
+            <source src="${file.url || `/api/files/${file.file_key}`}" type="audio/*">
+            Your browser does not support the audio element.
+          </audio>
+          <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+            <div class="flex items-center space-x-2">
+              <i class="fas fa-info-circle text-green-600"></i>
+              <p class="text-sm text-green-700 font-medium">Audio will be transcribed automatically when you send your message.</p>
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (file.file_type === 'video') {
+      previewContent = `
+        <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-slate-800">Video Preview</h3>
+            <button onclick="document.body.removeChild(this.closest('.fixed'))" class="text-slate-500 hover:text-slate-700">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="text-center mb-4">
+            <i class="fas fa-video text-purple-600 text-3xl mb-2"></i>
+            <p class="text-sm font-medium text-slate-700">${file.name}</p>
+          </div>
+          <video controls class="w-full mb-4 rounded-lg">
+            <source src="${file.url || `/api/files/${file.file_key}`}" type="video/*">
+            Your browser does not support the video element.
+          </video>
+          <div class="bg-purple-50 border border-purple-200 rounded-lg p-3">
+            <div class="flex items-center space-x-2">
+              <i class="fas fa-info-circle text-purple-600"></i>
+              <p class="text-sm text-purple-700 font-medium">Video files will be processed for analysis when you send your message.</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    modal.innerHTML = previewContent;
+    document.body.appendChild(modal);
+  }
+
+  showInfo(message) {
+    // Create a temporary info notification
+    const notification = document.createElement('div');
+    notification.className = 'fixed top-4 right-4 bg-blue-100 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm';
+    notification.innerHTML = `
+      <div class="flex items-start space-x-2">
+        <i class="fas fa-info-circle text-blue-600 mt-0.5"></i>
+        <p class="text-sm">${message}</p>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      if (document.body.contains(notification)) {
+        document.body.removeChild(notification);
+      }
+    }, 5000);
   }
 
   async loadUsage() {
