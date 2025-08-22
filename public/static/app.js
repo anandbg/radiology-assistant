@@ -697,14 +697,66 @@ class RadiologyAssistant {
       this.showUsageInfo(response.data.usage);
     }
     
-    // Reload messages
-    this.loadChat(this.currentChatId).then(() => {
-      // Update usage after loading
-      this.loadUsage();
-    }).catch((error) => {
-      console.error('Error reloading messages:', error);
-      this.showError('Failed to reload messages');
-    });
+    // Show transcription message first if audio was processed, then reload messages
+    if (response.data.transcription && response.data.transcription.audio_processed) {
+      // Show transcription immediately
+      this.displayTranscriptionMessage(response.data.transcription.text);
+      
+      // Wait a moment for visual effect, then reload messages to show the full conversation
+      setTimeout(() => {
+        this.loadChat(this.currentChatId).then(() => {
+          this.loadUsage();
+        }).catch((error) => {
+          console.error('Error reloading messages:', error);
+          this.showError('Failed to reload messages');
+        });
+      }, 1000);
+    } else {
+      // Normal flow - reload messages immediately
+      this.loadChat(this.currentChatId).then(() => {
+        this.loadUsage();
+      }).catch((error) => {
+        console.error('Error reloading messages:', error);
+        this.showError('Failed to reload messages');
+      });
+    }
+  }
+
+  displayTranscriptionMessage(transcriptionText) {
+    const messagesContainer = document.getElementById('messages-container');
+    if (!messagesContainer) return;
+
+    // Create transcription message element
+    const transcriptionDiv = document.createElement('div');
+    transcriptionDiv.className = 'message mb-4';
+    transcriptionDiv.innerHTML = `
+      <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex items-start space-x-3">
+          <div class="flex-shrink-0">
+            <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+              <i class="fas fa-microphone text-white text-sm"></i>
+            </div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center space-x-2 mb-2">
+              <span class="text-sm font-medium text-blue-700">Audio Transcription</span>
+              <span class="text-xs text-blue-500">• Processed by Whisper AI</span>
+            </div>
+            <div class="text-sm text-gray-800 bg-white rounded p-3 border">
+              ${transcriptionText}
+            </div>
+            <div class="text-xs text-blue-600 mt-2 flex items-center space-x-1">
+              <i class="fas fa-check-circle"></i>
+              <span>Transcription complete • Generating report...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Insert the transcription message
+    messagesContainer.appendChild(transcriptionDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
   async checkPII(text) {
@@ -1858,7 +1910,9 @@ class RadiologyAssistant {
       // Update tokens display
       const tokensElement = document.getElementById('tokens-used');
       if (tokensElement && usage) {
-        const totalTokens = usage.input_tokens + usage.output_tokens + (usage.transcription_duration || 0);
+        const inputTokens = usage.total_tokens_in || 0;
+        const outputTokens = usage.total_tokens_out || 0;
+        const totalTokens = inputTokens + outputTokens;
         tokensElement.textContent = totalTokens.toLocaleString();
       }
 
@@ -1883,9 +1937,13 @@ class RadiologyAssistant {
     const { usage, balance } = this.currentUsage;
     
     // Calculate costs based on OpenAI pricing (approximate)
-    const inputCost = (usage.input_tokens / 1000) * 0.0015; // GPT-4o input tokens
-    const outputCost = (usage.output_tokens / 1000) * 0.006; // GPT-4o output tokens  
-    const transcriptionCost = (usage.transcription_duration / 60) * 0.006; // Whisper per minute
+    const inputTokens = usage.total_tokens_in || 0;
+    const outputTokens = usage.total_tokens_out || 0;
+    const audioMinutes = usage.total_audio_minutes || 0;
+    
+    const inputCost = (inputTokens / 1000) * 0.0015; // GPT-4o input tokens
+    const outputCost = (outputTokens / 1000) * 0.006; // GPT-4o output tokens  
+    const transcriptionCost = audioMinutes * 0.006; // Whisper per minute
     const totalCost = inputCost + outputCost + transcriptionCost;
 
     const modal = document.createElement('div');
@@ -1926,15 +1984,15 @@ class RadiologyAssistant {
           <div class="bg-gray-50 rounded-lg p-3 space-y-2">
             <div class="flex justify-between text-sm">
               <span>Input tokens:</span>
-              <span>${usage.input_tokens?.toLocaleString() || 0}</span>
+              <span>${inputTokens.toLocaleString()}</span>
             </div>
             <div class="flex justify-between text-sm">
               <span>Output tokens:</span>
-              <span>${usage.output_tokens?.toLocaleString() || 0}</span>
+              <span>${outputTokens.toLocaleString()}</span>
             </div>
             <div class="flex justify-between text-sm">
               <span>Audio minutes:</span>
-              <span>${((usage.transcription_duration || 0) / 60).toFixed(1)}</span>
+              <span>${audioMinutes.toFixed(1)}</span>
             </div>
           </div>
         </div>

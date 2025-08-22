@@ -321,8 +321,66 @@ app.post('/api/chats/:id/messages', async (c) => {
   
   try {
     console.log('🔍 Processing message request...')
-    const { text, transcript_text, whisper_transcript, attachments, template_id } = await c.req.json()
-    console.log('✅ Request data parsed:', { text, template_id, hasTranscript: !!transcript_text, hasWhisper: !!whisper_transcript })
+    
+    // Check if request contains FormData (audio upload)
+    const contentType = c.req.header('content-type') || ''
+    let text, transcript_text, whisper_transcript, attachments, template_id, audioBlob
+    
+    if (contentType.includes('multipart/form-data')) {
+      console.log('📁 Processing FormData request (with audio)')
+      const formData = await c.req.formData()
+      text = formData.get('text') as string || ''
+      template_id = parseInt(formData.get('template_id') as string) || 1
+      attachments = JSON.parse(formData.get('attachments') as string || '[]')
+      audioBlob = formData.get('audio') as File
+      
+      // If we have audio, transcribe it using Whisper
+      if (audioBlob && audioBlob.size > 0) {
+        console.log('🎤 Audio file received, size:', audioBlob.size, 'bytes')
+        
+        try {
+          console.log('🔊 Starting Whisper transcription...')
+          
+          // Create FormData for OpenAI Whisper API
+          const whisperFormData = new FormData()
+          whisperFormData.append('file', audioBlob, 'audio.webm')
+          whisperFormData.append('model', 'whisper-1')
+          whisperFormData.append('response_format', 'json')
+          
+          // Call OpenAI Whisper API
+          const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${c.env.OPENAI_API_KEY}`
+            },
+            body: whisperFormData
+          })
+          
+          if (!whisperResponse.ok) {
+            const errorText = await whisperResponse.text()
+            console.error('❌ Whisper API error:', whisperResponse.status, errorText)
+            whisper_transcript = `[Transcription failed: ${whisperResponse.status}]`
+          } else {
+            const transcriptionResult = await whisperResponse.json()
+            whisper_transcript = transcriptionResult.text || '[No transcription received]'
+            console.log('✅ Whisper transcription completed:', whisper_transcript.substring(0, 100) + '...')
+          }
+        } catch (error) {
+          console.error('❌ Error during Whisper transcription:', error)
+          whisper_transcript = `[Transcription error: ${error.message}]`
+        }
+      }
+    } else {
+      console.log('📄 Processing JSON request')
+      const body = await c.req.json()
+      text = body.text
+      transcript_text = body.transcript_text
+      whisper_transcript = body.whisper_transcript
+      attachments = body.attachments
+      template_id = body.template_id
+    }
+    
+    console.log('✅ Request data parsed:', { text, template_id, hasTranscript: !!transcript_text, hasWhisper: !!whisper_transcript, hasAudio: !!audioBlob })
     
     // Get services from context
     const piiDetection = c.get('piiDetection')
@@ -574,6 +632,10 @@ app.post('/api/chats/:id/messages', async (c) => {
         rendered_md: renderedMarkdown,
         citations: citations
       },
+      transcription: whisper_transcript && whisper_transcript.length > 0 ? {
+        text: whisper_transcript,
+        audio_processed: !!audioBlob
+      } : null,
       pii_detected: piiResult.detected,
       context_sources: contextChunks.map(chunk => chunk.source),
       usage: {

@@ -7,10 +7,12 @@
 - **Features**: Template-based report generation, local PII detection, RAG-enhanced knowledge retrieval, voice recording, file uploads, hybrid service architecture
 
 ## 🚀 Live URLs
-- **Development**: https://3000-isyonk95ayb2o8zacz3j9-6532622b.e2b.dev
-- **API Health**: https://3000-isyonk95ayb2o8zacz3j9-6532622b.e2b.dev/api/health
-- **PII Detection Demo**: `POST /api/pii/detect`
-- **GitHub**: https://github.com/anandbg/radiology-assistant
+- **🌍 Production (Cloudflare Pages)**: https://7f7deceb.radiology-assistant.pages.dev
+- **🔍 API Health**: https://7f7deceb.radiology-assistant.pages.dev/api/health
+- **📋 Templates API**: https://7f7deceb.radiology-assistant.pages.dev/api/templates
+- **🛡️ PII Detection Demo**: `POST /api/pii/detect`
+- **🔧 Development**: https://3000-isyonk95ayb2o8zacz3j9-6532622b.e2b.dev
+- **📂 GitHub**: https://github.com/anandbg/radiology-assistant
 
 ## 🏗️ Hybrid Architecture Implementation
 
@@ -51,7 +53,7 @@
 #### 🤖 **AI & ML Services** (Architecture Complete)
 - ✅ **LLM Service**: OpenAI GPT-4o integration with structured output
 - ✅ **Vector Database**: Supabase pgvector for RAG operations
-- ✅ **Audio Processing**: Whisper API integration for transcription
+- ✅ **Audio Processing**: Whisper API integration with real-time transcription display
 - ✅ **Embeddings**: text-embedding-3-small for document similarity
 
 #### 💾 **Data Management**
@@ -71,10 +73,13 @@
 #### 🎨 **Frontend Interface**
 - ✅ Responsive chat interface with Tailwind CSS
 - ✅ Template selection and file upload UI
-- ✅ **Privacy-First Audio Processing**: 
+- ✅ **Complete Audio Processing Pipeline**: 
   - ✅ **Real-time local transcription** (Web Speech API, UK English)
   - ✅ **Automatic PII detection & masking** during speech recognition  
   - ✅ **Two-stage transcription**: Local → Server (Whisper API)
+  - ✅ **Professional transcription display**: Whisper transcription shown as separate message
+  - ✅ **Sequential message flow**: Audio transcription message → AI report generation
+  - ✅ **Audio blob upload**: FormData handling for audio file processing
   - ✅ **Chat display system**: Audio file + PII-marked transcript shown after recording
   - ✅ **User decision workflow**: Send to LLM or delete & re-record options
   - ✅ **Silent operation** - no notification pop-ups during recording
@@ -121,12 +126,15 @@ const processing = ['text extraction', 'OCR', 'audio transcription']
 - 📋 **Template Selection**: 3 radiology report types available
 - 💬 **Chat Interface**: Real-time messaging with AI responses
 - 📁 **File Management**: Upload interface (R2 backend ready)
-- 🎤 **Privacy-First Voice Recording**: 
+- 🎤 **Complete Audio Workflow**: 
   - **Real-time local transcription** (Web Speech API, silent operation)
   - **Automatic PII detection** during speech recognition
+  - **Professional audio processing**: FormData upload → Whisper API → transcription display
+  - **Sequential message display**: Transcription message appears first, then AI report follows
   - **Two-stage transcription workflow**: Local PII detection → Server Whisper transcription
   - **Chat window display**: After recording, shows audio file + PII-marked transcript
   - **Interactive decision making**: User chooses to send to LLM or delete & re-record
+  - **Visual feedback**: "Generating report..." indicator during AI processing
   - **Silent interface** - no pop-up notifications during recording
 - 📊 **Usage Tracking**: Credit monitoring and usage analytics
 
@@ -224,12 +232,15 @@ curl -X POST http://localhost:3000/api/pii/detect \
 ```
 
 ## 🚀 **Deployment Status**
+- **🌍 Production URL**: https://7f7deceb.radiology-assistant.pages.dev ✅ **LIVE**
 - **Platform**: Cloudflare Pages + Workers ✅
 - **Database**: D1 SQLite (local) + Supabase (configured) ✅
 - **Storage**: R2 (configured) ✅
-- **Status**: ✅ **Hybrid Architecture Active**
-- **Tech Stack**: Hono + TypeScript + D1 + R2 + Supabase + OpenAI
-- **Last Updated**: August 20, 2025
+- **🎤 Audio Features**: Whisper API transcription + FormData handling ✅
+- **📱 UI Features**: Chat organization, MRI Lumbar Spine default, no JSON downloads ✅
+- **Status**: ✅ **Production Ready - All Features Active**
+- **Tech Stack**: Hono + TypeScript + D1 + R2 + Supabase + OpenAI + Whisper
+- **Last Updated**: August 22, 2025
 
 ## 🔄 **Next Steps**
 
