@@ -708,12 +708,18 @@ class RadiologyAssistant {
     const audioBlob = this.pendingAudioBlob || this.localAudioBlob;
     const hasAudio = audioBlob && audioBlob.size > 0;
     const hasFiles = this.uploadedFiles && this.uploadedFiles.length > 0;
+    const hasUploadedAudio = hasFiles && (this.uploadedFiles || []).some(file => file.file_type === 'audio');
     const hasText = text && !text.includes('[Audio recorded') && !text.includes('will be transcribed on server]');
     
     if (!hasText && !hasAudio && !hasFiles) {
       console.log('No content to send');
       this.showError('Please enter text, record audio, or upload files before sending');
       return;
+    }
+
+    // Special message for uploaded audio files
+    if (hasUploadedAudio && !hasText && !hasAudio) {
+      console.log('Sending uploaded audio file(s) for transcription and analysis');
     }
 
     // Check if PII was detected and user hasn't made a choice yet
@@ -737,16 +743,45 @@ class RadiologyAssistant {
       // Clean the text (remove placeholder if present)
       const cleanText = hasText ? text : '';
 
-      // Always use FormData when we have audio, otherwise use JSON
-      if (hasAudio) {
+      // Check if we have uploaded audio files that need transcription
+      const audioFiles = (this.uploadedFiles || []).filter(file => file.file_type === 'audio');
+      const hasUploadedAudio = audioFiles.length > 0;
+
+      // Always use FormData when we have audio (recorded OR uploaded), otherwise use JSON
+      if (hasAudio || hasUploadedAudio) {
         // Audio + text message
         const formData = new FormData();
         formData.append('text', cleanText);
         formData.append('template_id', this.selectedTemplate?.id || '');
         formData.append('attachments', JSON.stringify(this.uploadedFiles || []));
-        formData.append('audio', audioBlob, 'recording.webm');
 
-        console.log('Sending audio + text to server for processing');
+        // Add recorded audio if available
+        if (hasAudio) {
+          formData.append('audio', audioBlob, 'recording.webm');
+          console.log('Sending recorded audio + text to server for processing');
+        } 
+        // If no recorded audio but we have uploaded audio files, process them for transcription
+        else if (hasUploadedAudio) {
+          // For uploaded audio files, we need to download them and add to FormData for transcription
+          console.log(`Found ${audioFiles.length} uploaded audio file(s) for transcription`);
+          
+          // Get the first audio file for transcription
+          const audioFile = audioFiles[0];
+          try {
+            // Fetch the uploaded audio file
+            const audioResponse = await fetch(`/api/files/${audioFile.file_key}`);
+            if (audioResponse.ok) {
+              const audioBlob = await audioResponse.blob();
+              formData.append('audio', audioBlob, audioFile.name);
+              console.log('✅ Added uploaded audio file to transcription queue:', audioFile.name);
+            } else {
+              console.warn('Failed to fetch uploaded audio file for transcription');
+            }
+          } catch (error) {
+            console.error('Error fetching uploaded audio file:', error);
+          }
+        }
+
         const response = await axios.post(`/api/chats/${this.currentChatId}/messages`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
           timeout: 120000 // 2 minute timeout
@@ -754,7 +789,7 @@ class RadiologyAssistant {
 
         this.handleMessageResponse(response, input);
       } else {
-        // Text-only message
+        // Text-only message (no audio at all)
         const messageData = {
           text: cleanText,
           template_id: this.selectedTemplate?.id,
@@ -2010,7 +2045,7 @@ class RadiologyAssistant {
 
   async offerAudioTranscription(file, attachment) {
     // Show a notification that the audio can be transcribed
-    this.showInfo(`🎤 Audio file uploaded: ${file.name}. Click "Send Message" to include transcription in your analysis.`);
+    this.showInfo(`🎤 Audio file uploaded: ${file.name}. Click "Send Message" to automatically transcribe via Whisper AI and generate your medical report.`);
   }
 
   showUploadProgress(filename, fileType = 'document') {
