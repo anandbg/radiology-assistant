@@ -1,57 +1,106 @@
-/* Custom styles for Radiology Assistant */
+/* Professional Medical Interface Styles */
 
-/* Chat interface styles */
+/* Enhanced Typography */
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+/* Enhanced Chat Interface */
 .chat-container {
   height: calc(100vh - 200px);
+  min-height: 600px;
 }
 
 .chat-messages {
-  height: calc(100% - 120px);
+  height: calc(100% - 180px);
   overflow-y: auto;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
 .chat-input {
-  height: 120px;
+  min-height: 200px;
 }
 
-/* Message bubbles */
+/* Professional Message Bubbles */
 .message-user {
-  @apply bg-blue-500 text-white rounded-lg p-3 ml-8 mb-4;
+  @apply bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl p-4 ml-12 mb-6 shadow-lg;
+  border-radius: 1.5rem 1.5rem 0.5rem 1.5rem;
 }
 
 .message-assistant {
-  @apply bg-white border rounded-lg p-4 mr-8 mb-4 shadow-sm;
+  @apply bg-white border border-slate-200 rounded-2xl p-6 mr-12 mb-6 shadow-lg;
+  border-radius: 1.5rem 1.5rem 1.5rem 0.5rem;
 }
 
-/* File upload styles */
+/* Professional File Upload */
 .file-upload-area {
-  @apply border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer;
+  @apply border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-blue-400 transition-all duration-300 cursor-pointer;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
 }
 
 .file-upload-area.dragover {
-  @apply border-blue-500 bg-blue-50;
+  @apply border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50;
+  transform: scale(1.02);
 }
 
-/* Recording button styles */
+/* Professional Recording Button */
 .record-button {
-  @apply w-16 h-16 rounded-full flex items-center justify-center text-white transition-all duration-200;
+  @apply w-12 h-12 rounded-xl flex items-center justify-center text-white transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer;
+  min-width: 48px;
+  min-height: 48px;
 }
 
 .record-button.idle {
-  @apply bg-gray-500 hover:bg-gray-600;
+  @apply bg-gradient-to-br from-slate-500 to-gray-600 hover:from-slate-600 hover:to-gray-700;
 }
 
 .record-button.recording {
-  @apply bg-red-500 animate-pulse;
+  @apply bg-gradient-to-br from-red-500 to-pink-600 animate-pulse;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
 }
 
-/* Template selection styles */
+.record-button:hover {
+  transform: scale(1.05);
+}
+
+.record-button:active {
+  transform: scale(0.95);
+}
+
+/* Send Button Enhancements */
+.send-btn {
+  @apply cursor-pointer;
+  min-height: 48px;
+}
+
+.send-btn:hover {
+  transform: translateY(-1px);
+}
+
+.send-btn:active {
+  transform: translateY(0);
+}
+
+/* Professional Template Cards */
 .template-card {
-  @apply border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md;
+  @apply cursor-pointer transition-all duration-200;
+}
+
+.template-card:hover {
+  transform: translateY(-2px);
 }
 
 .template-card.selected {
-  @apply border-blue-500 bg-blue-50;
+  transform: translateY(-2px);
 }
 
 /* PII warning styles */
@@ -121,21 +170,17 @@
   background: #a8a8a8;
 }
 
-/* Chat organization styles */
+/* Professional Chat History */
 .chat-item {
-  @apply transition-all duration-200;
+  @apply p-3 rounded-lg border border-transparent hover:border-slate-200 hover:bg-white hover:shadow-sm transition-all duration-200 cursor-pointer;
 }
 
 .chat-item:hover {
   @apply transform translate-x-1;
 }
 
-.recent-chats-header {
-  @apply text-green-600;
-}
-
-.older-chats-header {
-  @apply text-amber-600;
+.chat-item.bg-blue-50 {
+  @apply border-blue-200 shadow-sm;
 }
 
 #toggle-older-chats {

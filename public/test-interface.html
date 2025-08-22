@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Interface Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            height: calc(100vh - 200px);
+            min-height: 600px;
+        }
+        .chat-messages {
+            height: calc(100% - 220px);
+            overflow-y: auto;
+        }
+        .chat-input {
+            min-height: 220px;
+        }
+        .record-button {
+            width: 48px;
+            height: 48px;
+        }
+        .record-button.idle {
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+        }
+        .record-button.recording {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-4xl mx-auto p-6">
+        <h1 class="text-2xl font-bold mb-6">Chat Interface Test</h1>
+        
+        <!-- Chat Container -->
+        <div class="bg-white rounded-lg shadow-sm border chat-container">
+            <!-- Chat Header -->
+            <div class="px-4 py-3 border-b bg-blue-50">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-robot text-blue-600"></i>
+                        <h2 class="font-semibold text-slate-800">AI Chat Session</h2>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span class="text-xs text-slate-500">Ready</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messages Area -->
+            <div class="chat-messages p-4">
+                <div class="text-center text-slate-500 py-8">
+                    <i class="fas fa-comments text-4xl text-blue-600 mb-4"></i>
+                    <h3 class="text-lg font-semibold text-slate-600 mb-2">Ready to Chat</h3>
+                    <p class="text-sm text-slate-500">Type a message below or use voice recording</p>
+                </div>
+            </div>
+
+            <!-- Chat Input Area -->
+            <div class="border-t bg-gray-50 chat-input p-4">
+                <div class="space-y-4">
+                    <!-- Text Input Row -->
+                    <div class="flex items-end space-x-3">
+                        <!-- Microphone Button -->
+                        <button id="mic-button" class="record-button idle rounded-xl flex items-center justify-center text-white transition-all duration-200 shadow-lg hover:shadow-xl" title="Voice recording">
+                            <i class="fas fa-microphone text-lg"></i>
+                        </button>
+                        
+                        <!-- Text Input -->
+                        <div class="flex-1">
+                            <textarea
+                                id="message-input"
+                                placeholder="Type your message here..."
+                                class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none shadow-sm transition-all duration-200 bg-white"
+                                rows="3"
+                            ></textarea>
+                        </div>
+                        
+                        <!-- Send Button -->
+                        <button id="send-button" class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 shadow-lg hover:shadow-xl transition-all duration-200 font-medium" style="height: fit-content;">
+                            <i class="fas fa-paper-plane text-sm"></i>
+                            <span>Send</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Status Row -->
+                    <div class="flex items-center justify-between text-xs text-slate-500">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Secure processing</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span>Press Enter to send</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recording Status -->
+                <div id="recording-status" class="hidden mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
+                        <div class="flex-1">
+                            <p class="text-green-800 text-sm font-semibold">🎤 Recording...</p>
+                            <p class="text-green-600 text-xs mt-1">Speak clearly and click the microphone to stop</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRecording = false;
+        
+        document.getElementById('mic-button').addEventListener('click', function() {
+            const button = this;
+            const status = document.getElementById('recording-status');
+            
+            if (!isRecording) {
+                // Start recording
+                isRecording = true;
+                button.className = button.className.replace('idle', 'recording');
+                button.innerHTML = '<i class="fas fa-stop text-lg"></i>';
+                status.classList.remove('hidden');
+                console.log('Started recording');
+            } else {
+                // Stop recording
+                isRecording = false;
+                button.className = button.className.replace('recording', 'idle');
+                button.innerHTML = '<i class="fas fa-microphone text-lg"></i>';
+                status.classList.add('hidden');
+                console.log('Stopped recording');
+            }
+        });
+        
+        document.getElementById('send-button').addEventListener('click', function() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            
+            if (message) {
+                console.log('Sending message:', message);
+                // Add message to chat (simulation)
+                addMessage('user', message);
+                input.value = '';
+                
+                // Simulate response
+                setTimeout(() => {
+                    addMessage('assistant', 'Thank you for your message! This is a test response.');
+                }, 1000);
+            }
+        });
+        
+        document.getElementById('message-input').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('send-button').click();
+            }
+        });
+        
+        function addMessage(role, text) {
+            const messagesContainer = document.querySelector('.chat-messages');
+            const messageDiv = document.createElement('div');
+            
+            if (role === 'user') {
+                messageDiv.className = 'mb-4 flex justify-end';
+                messageDiv.innerHTML = `
+                    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl p-4 max-w-md shadow-lg" style="border-radius: 1.5rem 1.5rem 0.5rem 1.5rem;">
+                        ${text}
+                    </div>
+                `;
+            } else {
+                messageDiv.className = 'mb-4 flex justify-start';
+                messageDiv.innerHTML = `
+                    <div class="bg-white border border-slate-200 rounded-2xl p-4 max-w-md shadow-lg" style="border-radius: 1.5rem 1.5rem 1.5rem 0.5rem;">
+                        <div class="flex items-center space-x-2 mb-2">
+                            <i class="fas fa-robot text-blue-600"></i>
+                            <span class="text-sm font-medium text-slate-700">Assistant</span>
+                        </div>
+                        ${text}
+                    </div>
+                `;
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        console.log('Chat interface loaded successfully!');
+    </script>
+</body>
+</html>

@@ -134,132 +134,213 @@ class RadiologyAssistant {
     if (!app) return;
 
     app.innerHTML = `
-      <div class="max-w-7xl mx-auto p-4">
-        <!-- Header -->
-        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-              <i class="fas fa-x-ray text-blue-600 text-2xl"></i>
-              <h1 class="text-2xl font-bold text-gray-900">Radiology Assistant</h1>
-            </div>
-            <div class="flex items-center space-x-4">
-              <!-- Usage Stats -->
-              <div class="text-sm text-gray-600 space-y-1">
-                <div class="flex items-center">
-                  <i class="fas fa-coins mr-1"></i>
-                  <span id="credits-remaining">Loading...</span> credits
+      <div class="min-h-screen bg-slate-50">
+        <!-- Professional Header -->
+        <div class="bg-white border-b border-slate-200 shadow-sm">
+          <div class="max-w-7xl mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
+                  <i class="fas fa-stethoscope text-white text-lg"></i>
                 </div>
-                <div class="flex items-center cursor-pointer" onclick="radiologyApp.showUsageDetails()">
-                  <i class="fas fa-chart-line mr-1"></i>
-                  <span id="tokens-used">0</span> tokens
-                  <i class="fas fa-info-circle ml-1 text-gray-400"></i>
+                <div>
+                  <h1 class="text-2xl font-bold text-slate-800">Radiology Assistant</h1>
+                  <p class="text-sm text-slate-500">AI-Powered Medical Analysis</p>
                 </div>
               </div>
-              <button id="new-chat-button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
-                <i class="fas fa-plus"></i>
-                <span>New Chat</span>
-              </button>
+              
+              <div class="flex items-center space-x-4">
+                <!-- Usage Stats -->
+                <div class="hidden md:flex items-center space-x-4">
+                  <div class="flex items-center space-x-2 px-3 py-2 bg-slate-50 rounded-lg">
+                    <i class="fas fa-coins text-amber-600"></i>
+                    <span id="credits-remaining" class="font-semibold">Loading...</span>
+                    <span class="text-xs text-slate-500">credits</span>
+                  </div>
+                  
+                  <div class="flex items-center space-x-2 px-3 py-2 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100" onclick="radiologyApp.showUsageDetails()">
+                    <i class="fas fa-chart-line text-blue-600"></i>
+                    <span id="tokens-used" class="font-semibold">0</span>
+                    <span class="text-xs text-slate-500">tokens</span>
+                  </div>
+                </div>
+                
+                <button id="new-chat-button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
+                  <i class="fas fa-plus"></i>
+                  <span>New Analysis</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <!-- Sidebar -->
-          <div class="lg:col-span-1">
-            <!-- Template Selection -->
-            <div class="bg-white rounded-lg shadow-sm p-4 mb-6">
-              <h3 class="font-semibold text-gray-900 mb-3">Report Templates</h3>
-              <div id="templates-list" class="space-y-2">
-                ${this.renderTemplates()}
-              </div>
-            </div>
-
-            <!-- Chat History -->
-            <div class="bg-white rounded-lg shadow-sm p-4">
-              <h3 class="font-semibold text-gray-900 mb-3">Chat History</h3>
-              
-              <!-- Recent Chats -->
-              <div class="mb-4">
-                <h4 class="text-sm font-medium recent-chats-header mb-2 flex items-center">
-                  <i class="fas fa-clock mr-2"></i>
-                  Recent Chats
-                </h4>
-                <div id="recent-chats-list" class="space-y-1">
-                  <div class="text-gray-500 text-sm">Loading chats...</div>
-                </div>
-              </div>
-              
-              <!-- Older Chats -->
-              <div id="older-chats-section" class="hidden">
-                <button id="toggle-older-chats" class="w-full text-left text-sm font-medium older-chats-header mb-2 flex items-center justify-between py-1 px-2 rounded">
-                  <span class="flex items-center">
-                    <i class="fas fa-archive mr-2"></i>
-                    Older Chats
-                  </span>
-                  <i id="older-chats-arrow" class="fas fa-chevron-down text-gray-400 text-xs"></i>
-                </button>
-                <div id="older-chats-list" class="space-y-1 hidden">
-                  <!-- Older chats will be populated here -->
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Main Chat Interface -->
-          <div class="lg:col-span-3">
-            <div class="bg-white rounded-lg shadow-sm chat-container">
-              <!-- Messages -->
-              <div id="messages-container" class="chat-messages p-4">
-                <div class="text-center text-gray-500 py-8">
-                  <i class="fas fa-comments text-4xl mb-4"></i>
-                  <p>Start a conversation with your radiology assistant</p>
-                  <p class="text-sm mt-2">Upload images, dictate findings, or type your observations</p>
-                </div>
-              </div>
-
-              <!-- Input Area -->
-              <div class="border-t bg-gray-50 chat-input p-4">
-                <!-- File Upload Area -->
-                <div class="file-upload-area mb-4" onclick="document.getElementById('file-input').click()">
-                  <input type="file" id="file-input" multiple accept=".pdf,.docx,.png,.jpg,.jpeg" class="hidden">
-                  <i class="fas fa-upload text-gray-400 text-xl mb-2"></i>
-                  <p class="text-gray-600 text-sm">Click or drag files here (PDF, DOCX, Images)</p>
-                </div>
-
-                <!-- Input Controls -->
-                <div class="flex items-end space-x-3">
-                  <div class="flex-1">
-                    <textarea
-                      id="message-input"
-                      placeholder="Describe the case, upload images, or use voice recording..."
-                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                      rows="2"
-                    ></textarea>
-                  </div>
-                  <button id="record-button" class="record-button idle" title="Click to start/stop voice recording">
-                    <i class="fas fa-microphone"></i>
-                  </button>
-                  <button id="send-button" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center space-x-2 send-btn">
-                    <i class="fas fa-paper-plane"></i>
-                    <span>Send</span>
-                  </button>
-                </div>
-
-                <!-- Recording Status -->
-                <div id="recording-status" class="hidden mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+        <!-- Main Content -->
+        <div class="max-w-7xl mx-auto p-6">
+          <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Sidebar -->
+            <div class="lg:col-span-1 space-y-6">
+              <!-- Template Selection -->
+              <div class="bg-white rounded-lg shadow-sm border">
+                <div class="px-4 py-3 border-b bg-slate-50">
                   <div class="flex items-center space-x-2">
-                    <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                    <span class="text-green-700 text-sm font-medium">🛡️ Privacy-first recording active - all processing happens locally</span>
+                    <i class="fas fa-file-medical text-blue-600"></i>
+                    <h3 class="font-semibold text-slate-800">Report Templates</h3>
+                  </div>
+                </div>
+                <div class="p-4">
+                  <div id="templates-list" class="space-y-2">
+                    ${this.renderTemplates()}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Analysis History -->
+              <div class="bg-white rounded-lg shadow-sm border">
+                <div class="px-4 py-3 border-b bg-slate-50">
+                  <div class="flex items-center space-x-2">
+                    <i class="fas fa-history text-green-600"></i>
+                    <h3 class="font-semibold text-slate-800">Analysis History</h3>
+                  </div>
+                </div>
+                <div class="p-4">
+                  <!-- Recent Analyses -->
+                  <div class="mb-4">
+                    <div class="flex items-center space-x-2 mb-3">
+                      <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <h4 class="text-sm font-medium text-slate-700">Recent</h4>
+                    </div>
+                    <div id="recent-chats-list" class="space-y-2">
+                      <div class="text-slate-400 text-sm flex items-center justify-center py-4">
+                        <i class="fas fa-spinner fa-spin mr-2"></i>
+                        Loading...
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Archive -->
+                  <div id="older-chats-section" class="hidden">
+                    <button id="toggle-older-chats" class="w-full text-left text-sm font-medium mb-3 flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 transition-colors">
+                      <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-amber-500 rounded-full"></div>
+                        <span class="text-slate-700">Archive</span>
+                      </div>
+                      <i id="older-chats-arrow" class="fas fa-chevron-down text-slate-400 text-xs transition-transform"></i>
+                    </button>
+                    <div id="older-chats-list" class="space-y-2 hidden pl-4">
+                      <!-- Archived analyses will be populated here -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chat Interface -->
+            <div class="lg:col-span-3">
+              <div class="bg-white rounded-lg shadow-sm border chat-container">
+                <!-- Chat Header -->
+                <div class="px-4 py-3 border-b bg-blue-50">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                      <i class="fas fa-robot text-blue-600"></i>
+                      <h2 class="font-semibold text-slate-800">AI Analysis Session</h2>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                      <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span class="text-xs text-slate-500">Ready</span>
+                    </div>
                   </div>
                 </div>
 
-                <!-- PII Warning -->
-                <div id="pii-warning" class="pii-warning hidden mt-3">
-                  <div class="flex items-start space-x-2">
-                    <i class="fas fa-exclamation-triangle text-red-600 mt-1"></i>
-                    <div>
-                      <p class="font-semibold text-red-700">Potential PII Detected</p>
-                      <p class="pii-warning-text">Please review and remove any personal identifiable information before sending.</p>
+                <!-- Messages -->
+                <div id="messages-container" class="chat-messages p-4">
+                  <div class="text-center text-slate-500 py-8">
+                    <i class="fas fa-stethoscope text-4xl text-blue-600 mb-4"></i>
+                    <h3 class="text-lg font-semibold text-slate-600 mb-2">Ready for Medical Analysis</h3>
+                    <p class="text-sm text-slate-500">Upload medical images, dictate findings, or describe patient observations</p>
+                  </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="border-t bg-gray-50 chat-input p-4">
+                  <!-- Professional File Upload Area -->
+                  <div class="file-upload-area mb-6 bg-gradient-to-br from-slate-50 to-blue-50 border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 cursor-pointer group" onclick="document.getElementById('file-input').click()">
+                    <input type="file" id="file-input" multiple accept=".pdf,.docx,.png,.jpg,.jpeg,.dcm" class="hidden">
+                    <div class="flex flex-col items-center space-y-3">
+                      <div class="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center group-hover:shadow-md transition-shadow">
+                        <i class="fas fa-cloud-upload-alt text-blue-600 text-xl"></i>
+                      </div>
+                      <div>
+                        <p class="text-slate-700 font-medium">Upload Medical Files</p>
+                        <p class="text-slate-500 text-sm mt-1">DICOM, PDF, DOCX, Images • Drag & drop or click</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Enhanced Chat Input Controls -->
+                  <div class="space-y-4">
+                    <!-- Main Input Row -->
+                    <div class="flex items-end space-x-3">
+                      <!-- Microphone Button -->
+                      <button id="record-button" class="record-button idle group flex-shrink-0" title="Voice dictation (Click to start/stop recording)">
+                        <i class="fas fa-microphone text-lg"></i>
+                        <span class="sr-only">Start voice recording</span>
+                      </button>
+                      
+                      <!-- Text Input Area -->
+                      <div class="flex-1">
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Clinical Information</label>
+                        <textarea
+                          id="message-input"
+                          placeholder="Describe patient presentation, clinical history, or imaging findings..."
+                          class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none shadow-sm transition-all duration-200 bg-white"
+                          rows="3"
+                        ></textarea>
+                      </div>
+                      
+                      <!-- Send Button -->
+                      <button id="send-button" class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 shadow-lg hover:shadow-xl transition-all duration-200 font-medium send-btn flex-shrink-0" style="height: fit-content;">
+                        <i class="fas fa-paper-plane text-sm"></i>
+                        <span>Send</span>
+                      </button>
+                    </div>
+                    
+                    <!-- Info Row -->
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center space-x-3">
+                        <div class="text-xs text-slate-500">
+                          <i class="fas fa-shield-alt mr-1"></i>
+                          <span>HIPAA-compliant processing</span>
+                        </div>
+                      </div>
+                      
+                      <div class="text-xs text-slate-500">
+                        <i class="fas fa-keyboard mr-1"></i>
+                        <span>Press Enter to send • Shift+Enter for new line</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Professional Recording Status -->
+                  <div id="recording-status" class="hidden mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl">
+                    <div class="flex items-center space-x-3">
+                      <div class="w-4 h-4 bg-green-500 rounded-full animate-pulse shadow-sm"></div>
+                      <div class="flex-1">
+                        <p class="text-green-800 text-sm font-semibold">🎤 Voice Recording Active</p>
+                        <p class="text-green-600 text-xs mt-1">Privacy-first processing • All data stays secure</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Professional PII Warning -->
+                  <div id="pii-warning" class="pii-warning hidden mt-4 bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-4">
+                    <div class="flex items-start space-x-3">
+                      <div class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <i class="fas fa-shield-alt text-red-600 text-sm"></i>
+                      </div>
+                      <div class="flex-1">
+                        <p class="font-semibold text-red-800">Protected Health Information Detected</p>
+                        <p class="pii-warning-text text-red-700 text-sm mt-1">Please review and remove any personal identifiers before proceeding with analysis.</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -294,13 +375,49 @@ class RadiologyAssistant {
   }
 
   renderTemplates() {
+    if (!this.templates || this.templates.length === 0) {
+      return `
+        <div class="text-slate-400 text-sm flex items-center justify-center py-4">
+          <i class="fas fa-spinner fa-spin mr-2"></i>
+          Loading templates...
+        </div>
+      `;
+    }
+    
     return this.templates.map(template => `
       <div class="template-card ${this.selectedTemplate?.id === template.id ? 'selected' : ''}" 
            data-template-id="${template.id}">
-        <div class="font-medium text-sm">${template.name}</div>
-        <div class="text-xs text-gray-500 mt-1">v${template.version}</div>
+        <div class="flex items-start space-x-3 p-4 rounded-lg border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 cursor-pointer ${this.selectedTemplate?.id === template.id ? 'border-blue-500 bg-blue-50 shadow-md' : 'bg-white hover:bg-slate-50'}">
+          <div class="w-8 h-8 bg-gradient-to-br ${this.getTemplateColor(template.name)} rounded-lg flex items-center justify-center flex-shrink-0">
+            <i class="fas ${this.getTemplateIcon(template.name)} text-white text-sm"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-sm text-slate-800 leading-tight">${template.name}</div>
+            <div class="text-xs text-slate-500 mt-1 flex items-center space-x-2">
+              <span>Version ${template.version || '1.0'}</span>
+              ${template.created_by_name ? `<span>•</span><span>by ${template.created_by_name}</span>` : ''}
+            </div>
+          </div>
+          ${this.selectedTemplate?.id === template.id ? '<div class="flex-shrink-0"><i class="fas fa-check-circle text-blue-600"></i></div>' : ''}
+        </div>
       </div>
     `).join('');
+  }
+
+  getTemplateColor(name) {
+    if (name.includes('MRI')) return 'from-purple-500 to-indigo-600';
+    if (name.includes('CT')) return 'from-blue-500 to-cyan-600';
+    if (name.includes('X-Ray') || name.includes('Chest')) return 'from-green-500 to-teal-600';
+    if (name.includes('Ultrasound')) return 'from-amber-500 to-orange-600';
+    return 'from-slate-500 to-gray-600';
+  }
+
+  getTemplateIcon(name) {
+    if (name.includes('MRI')) return 'fa-brain';
+    if (name.includes('CT')) return 'fa-circle-radiation';
+    if (name.includes('X-Ray') || name.includes('Chest')) return 'fa-lungs';
+    if (name.includes('Ultrasound')) return 'fa-heartbeat';
+    return 'fa-file-medical';
   }
 
   selectTemplate(templateId) {
