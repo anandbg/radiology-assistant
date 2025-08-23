@@ -7,8 +7,8 @@
 - **Features**: Template-based report generation, local PII detection, RAG-enhanced knowledge retrieval, voice recording, file uploads, hybrid service architecture
 
 ## 🚀 Live URLs
-- **🌍 Production (Cloudflare Pages)**: https://radiology-assistant.pages.dev
-- **🚀 Latest Deployment**: https://53c9db95.radiology-assistant.pages.dev
+- **🌍 Production (Cloudflare Pages)**: https://07fbc3ec.radiology-assistant.pages.dev
+- **🚀 Latest Deployment**: https://07fbc3ec.radiology-assistant.pages.dev
 - **🔍 API Health**: https://radiology-assistant.pages.dev/api/health
 - **📋 Templates API**: https://radiology-assistant.pages.dev/api/templates
 - **🛡️ PII Detection Demo**: `POST /api/pii/detect`
@@ -242,7 +242,7 @@ curl -X POST http://localhost:3000/api/pii/detect \
 ```
 
 ## 🚀 **Deployment Status**
-- **🌍 Production URL**: https://7f7deceb.radiology-assistant.pages.dev ✅ **LIVE**
+- **🌍 Production URL**: https://07fbc3ec.radiology-assistant.pages.dev ✅ **LIVE**
 - **Platform**: Cloudflare Pages + Workers ✅
 - **Database**: D1 SQLite (local) + Supabase (configured) ✅
 - **Storage**: R2 (configured) ✅
@@ -250,7 +250,7 @@ curl -X POST http://localhost:3000/api/pii/detect \
 - **📱 UI Features**: Chat organization, MRI Lumbar Spine default, no JSON downloads ✅
 - **Status**: ✅ **Production Ready - All Features Active**
 - **Tech Stack**: Hono + TypeScript + D1 + R2 + Supabase + OpenAI + Whisper
-- **Last Updated**: August 22, 2025
+- **Last Updated**: August 23, 2025
 
 ## 🔄 **Next Steps**
 
