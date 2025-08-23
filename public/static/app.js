@@ -851,6 +851,8 @@ class RadiologyAssistant {
       
       if (error.response?.data?.error === 'PII_DETECTED') {
         this.showPIIWarning(error.response.data.detected_entities);
+      } else if (error.response?.data?.error === 'TRANSCRIPTION_FAILED') {
+        this.showError(`🎵 ${error.response.data.message}\n\n📋 Supported formats: ${error.response.data.supported_formats?.join(', ')}\n\n💡 Try converting your file to MP3 format for best compatibility.`);
       } else if (error.code === 'ECONNABORTED') {
         this.showError('Request timed out. Please try again.');
       } else {
