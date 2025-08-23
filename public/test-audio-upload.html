@@ -18,14 +18,14 @@
             <div class="mb-8">
                 <h2 class="text-xl font-semibold text-gray-800 mb-4">Upload Audio Files</h2>
                 <div id="upload-area" class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 cursor-pointer" onclick="document.getElementById('audio-input').click()">
-                    <input type="file" id="audio-input" multiple accept=".mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.mp4,.mov" class="hidden">
+                    <input type="file" id="audio-input" multiple accept=".mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.mp4,.mov,audio/*,video/mp4,video/quicktime" class="hidden">
                     <div class="flex flex-col items-center space-y-3">
                         <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
                             <i class="fas fa-cloud-upload-alt text-blue-600 text-2xl"></i>
                         </div>
                         <div>
                             <p class="text-lg font-medium text-gray-700">Upload Audio Files</p>
-                            <p class="text-gray-500">MP3, WAV, M4A, OGG, AAC, FLAC, MP4, MOV • Drag & drop or click</p>
+                            <p class="text-gray-500">MP3, WAV, M4A, OGG, AAC, FLAC, MP4 (audio), MOV • Drag & drop or click</p>
                         </div>
                     </div>
                 </div>
@@ -66,7 +66,7 @@
                     </div>
                     <div class="flex items-center space-x-2">
                         <i class="fas fa-check text-green-600"></i>
-                        <span class="text-sm font-medium">MP4 (audio)</span>
+                        <span class="text-sm font-medium">MP4</span>
                     </div>
                     <div class="flex items-center space-x-2">
                         <i class="fas fa-check text-green-600"></i>
@@ -187,6 +187,11 @@
             const extension = file.name.split('.').pop().toLowerCase();
             const hasValidExtension = audioExtensions.includes(extension);
             const hasValidMimeType = audioMimeTypes.some(type => file.type.startsWith(type));
+            
+            // Always treat MP4/MOV as audio for transcription purposes
+            if (extension === 'mp4' || extension === 'mov' || file.type.startsWith('video/mp4') || file.type.startsWith('video/quicktime')) {
+                return true;
+            }
             
             return hasValidExtension || hasValidMimeType;
         }

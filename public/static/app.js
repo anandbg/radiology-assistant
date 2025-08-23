@@ -264,14 +264,14 @@ class RadiologyAssistant {
                 <div class="border-t bg-gray-50 chat-input p-4">
                   <!-- Professional File Upload Area -->
                   <div class="file-upload-area mb-6 bg-gradient-to-br from-slate-50 to-blue-50 border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 cursor-pointer group" onclick="document.getElementById('file-input').click()">
-                    <input type="file" id="file-input" multiple accept=".pdf,.docx,.png,.jpg,.jpeg,.dcm,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.mp4,.mov,.avi" class="hidden">
+                    <input type="file" id="file-input" multiple accept=".pdf,.docx,.png,.jpg,.jpeg,.dcm,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.mp4,.mov,audio/*,video/mp4,video/quicktime" class="hidden">
                     <div class="flex flex-col items-center space-y-3">
                       <div class="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center group-hover:shadow-md transition-shadow">
                         <i class="fas fa-cloud-upload-alt text-blue-600 text-xl"></i>
                       </div>
                       <div>
                         <p class="text-slate-700 font-medium">Upload Medical Files & Audio</p>
-                        <p class="text-slate-500 text-sm mt-1">DICOM, PDF, DOCX, Images, Audio (MP3, WAV, M4A, OGG) • Drag & drop or click</p>
+                        <p class="text-slate-500 text-sm mt-1">DICOM, PDF, DOCX, Images, Audio (MP3, WAV, M4A, MP4, OGG) • Drag & drop or click</p>
                       </div>
                     </div>
                   </div>
@@ -746,6 +746,17 @@ class RadiologyAssistant {
       // Check if we have uploaded audio files that need transcription
       const audioFiles = (this.uploadedFiles || []).filter(file => file.file_type === 'audio');
       const hasUploadedAudio = audioFiles.length > 0;
+
+      // Debug logging
+      console.log('📊 Send message debug:', {
+        hasText,
+        hasAudio,
+        hasFiles,
+        hasUploadedAudio,
+        uploadedFiles: this.uploadedFiles,
+        audioFiles: audioFiles,
+        audioFilesCount: audioFiles.length
+      });
 
       // Always use FormData when we have audio (recorded OR uploaded), otherwise use JSON
       if (hasAudio || hasUploadedAudio) {
@@ -1968,9 +1979,9 @@ class RadiologyAssistant {
     
     for (let file of Array.from(files)) {
       try {
-        // Detect file type
+        // Detect file type - prioritize audio detection for MP4/MOV
         const isAudioFile = this.isAudioFile(file);
-        const isVideoFile = this.isVideoFile(file);
+        const isVideoFile = !isAudioFile && this.isVideoFile(file); // Only consider video if not audio
         
         // Validate file size (audio files can be larger)
         const sizeLimit = isAudioFile || isVideoFile ? 100 * 1024 * 1024 : 50 * 1024 * 1024; // 100MB for audio/video, 50MB for others
@@ -2021,11 +2032,19 @@ class RadiologyAssistant {
   }
 
   isAudioFile(file) {
-    const audioExtensions = ['mp3', 'wav', 'm4a', 'ogg', 'webm', 'aac', 'flac'];
-    const audioMimeTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/flac', 'audio/x-flac'];
+    const audioExtensions = ['mp3', 'wav', 'm4a', 'ogg', 'webm', 'aac', 'flac', 'mp4', 'mov'];
+    const audioMimeTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/flac', 'audio/x-flac', 'video/mp4', 'video/quicktime'];
     
     const extension = file.name.split('.').pop().toLowerCase();
-    return audioExtensions.includes(extension) || audioMimeTypes.some(type => file.type.startsWith(type));
+    const hasAudioExtension = audioExtensions.includes(extension);
+    const hasAudioMimeType = audioMimeTypes.some(type => file.type.startsWith(type));
+    
+    // Special handling for MP4 and MOV - treat as audio for transcription purposes
+    if (extension === 'mp4' || extension === 'mov' || file.type.startsWith('video/mp4') || file.type.startsWith('video/quicktime')) {
+      return true; // Always treat MP4/MOV as audio for Whisper transcription
+    }
+    
+    return hasAudioExtension || hasAudioMimeType;
   }
 
   isVideoFile(file) {
@@ -2037,8 +2056,8 @@ class RadiologyAssistant {
   }
 
   validateAudioFormat(file) {
-    // More strict validation for audio files
-    const supportedFormats = ['mp3', 'wav', 'm4a', 'ogg', 'aac', 'flac'];
+    // More strict validation for audio files (now including MP4/MOV)
+    const supportedFormats = ['mp3', 'wav', 'm4a', 'ogg', 'aac', 'flac', 'mp4', 'mov'];
     const extension = file.name.split('.').pop().toLowerCase();
     return supportedFormats.includes(extension);
   }
