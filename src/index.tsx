@@ -334,6 +334,16 @@ app.post('/api/chats/:id/messages', async (c) => {
       attachments = JSON.parse(formData.get('attachments') as string || '[]')
       audioBlob = formData.get('audio') as File
       
+      console.log('🔍 FormData contents:')
+      for (const [key, value] of formData.entries()) {
+        if (value instanceof File) {
+          console.log(`  ${key}: File(${value.name}, ${value.size} bytes, ${value.type})`)
+        } else {
+          console.log(`  ${key}: ${typeof value === 'string' ? value.substring(0, 100) : value}`)
+        }
+      }
+      console.log('🎵 audioBlob:', audioBlob ? `File(${audioBlob.name}, ${audioBlob.size} bytes)` : 'null')
+      
       // If we have audio, transcribe it using Whisper
       if (audioBlob && audioBlob.size > 0) {
         console.log('🎤 Audio file received, size:', audioBlob.size, 'bytes')
@@ -343,9 +353,14 @@ app.post('/api/chats/:id/messages', async (c) => {
           
           // Create FormData for OpenAI Whisper API
           const whisperFormData = new FormData()
-          whisperFormData.append('file', audioBlob, 'audio.webm')
+          // Use original filename to preserve format, or fallback to mp4
+          const filename = audioBlob.name || 'audio.mp4'
+          console.log('🎵 Sending to Whisper:', { filename, size: audioBlob.size, type: audioBlob.type })
+          
+          whisperFormData.append('file', audioBlob, filename)
           whisperFormData.append('model', 'whisper-1')
           whisperFormData.append('response_format', 'json')
+          whisperFormData.append('language', 'en') // Specify English for better accuracy
           
           // Call OpenAI Whisper API
           const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -359,11 +374,22 @@ app.post('/api/chats/:id/messages', async (c) => {
           if (!whisperResponse.ok) {
             const errorText = await whisperResponse.text()
             console.error('❌ Whisper API error:', whisperResponse.status, errorText)
-            whisper_transcript = `[Transcription failed: ${whisperResponse.status}]`
+            
+            let errorMessage = `Transcription failed: ${whisperResponse.status}`
+            if (whisperResponse.status === 400) {
+              errorMessage += ' - Audio format may not be supported. Try MP3 or WAV format.'
+            } else if (whisperResponse.status === 413) {
+              errorMessage += ' - Audio file too large. Maximum 25MB.'
+            } else if (whisperResponse.status === 401) {
+              errorMessage += ' - API authentication failed.'
+            }
+            
+            whisper_transcript = `[${errorMessage}]`
           } else {
             const transcriptionResult = await whisperResponse.json()
+            console.log('📝 Raw Whisper API response:', transcriptionResult)
             whisper_transcript = transcriptionResult.text || '[No transcription received]'
-            console.log('✅ Whisper transcription completed:', whisper_transcript.substring(0, 100) + '...')
+            console.log('✅ Whisper transcription completed. Length:', whisper_transcript.length, 'Text:', whisper_transcript.substring(0, 200) + (whisper_transcript.length > 200 ? '...' : ''))
           }
         } catch (error) {
           console.error('❌ Error during Whisper transcription:', error)
@@ -392,6 +418,25 @@ app.post('/api/chats/:id/messages', async (c) => {
     // Priority: whisper_transcript (most accurate) > text (local + manual) > transcript_text (legacy)
     const inputText = whisper_transcript || text || transcript_text || ''
     const localTranscript = text || transcript_text || '' // Keep local for comparison
+    
+    console.log('🎯 Text processing:', {
+      whisper_transcript: whisper_transcript ? `"${whisper_transcript.substring(0, 100)}..."` : 'null',
+      text: text ? `"${text.substring(0, 100)}..."` : 'empty',
+      inputText: inputText ? `"${inputText.substring(0, 100)}..."` : 'empty',
+      inputTextLength: inputText.length
+    })
+
+    // Check if transcription failed and we have no other text input
+    if (audioBlob && whisper_transcript && whisper_transcript.includes('Transcription failed:') && !text && !transcript_text) {
+      console.log('❌ Audio transcription failed and no other text provided')
+      return c.json({
+        error: 'TRANSCRIPTION_FAILED',
+        message: 'Audio transcription failed. Please try again with a different audio format (MP3, WAV recommended) or provide text description instead.',
+        transcription_error: whisper_transcript,
+        supported_formats: ['MP3', 'WAV', 'M4A', 'FLAC', 'AAC']
+      }, 400)
+    }
+
     const piiResult = piiDetection.detectPII(inputText)
     
     if (piiResult.detected && piiDetection.isHighRiskPII(piiResult.entities)) {

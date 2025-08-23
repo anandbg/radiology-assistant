@@ -775,21 +775,53 @@ class RadiologyAssistant {
         else if (hasUploadedAudio) {
           // For uploaded audio files, we need to download them and add to FormData for transcription
           console.log(`Found ${audioFiles.length} uploaded audio file(s) for transcription`);
+          console.log('Audio files:', audioFiles);
           
           // Get the first audio file for transcription
           const audioFile = audioFiles[0];
+          console.log('Processing audio file:', audioFile);
+          
+          // Determine the correct way to fetch the audio file
+          let fetchUrl;
+          if (audioFile.url) {
+            // Use direct URL (Supabase storage)
+            fetchUrl = audioFile.url;
+            console.log('🔄 Using direct URL for audio file:', fetchUrl);
+          } else if (audioFile.file_key) {
+            // Use file_key via API endpoint
+            fetchUrl = `/api/files/${audioFile.file_key}`;
+            console.log('🔄 Using file_key via API for audio file:', fetchUrl);
+          } else if (audioFile.r2_key) {
+            // Use r2_key via API endpoint
+            fetchUrl = `/api/files/${audioFile.r2_key}`;
+            console.log('🔄 Using r2_key via API for audio file:', fetchUrl);
+          } else {
+            console.error('❌ Audio file missing URL/file_key/r2_key:', audioFile);
+            this.showError('Audio file upload incomplete. Please try uploading again.');
+            return;
+          }
+          
           try {
-            // Fetch the uploaded audio file
-            const audioResponse = await fetch(`/api/files/${audioFile.file_key}`);
+            
+            const audioResponse = await fetch(fetchUrl);
+            console.log('📥 Audio fetch response:', audioResponse.status, audioResponse.statusText);
+            
             if (audioResponse.ok) {
               const audioBlob = await audioResponse.blob();
+              console.log('🎵 Audio blob size:', audioBlob.size, 'bytes, type:', audioBlob.type);
+              
               formData.append('audio', audioBlob, audioFile.name);
               console.log('✅ Added uploaded audio file to transcription queue:', audioFile.name);
             } else {
-              console.warn('Failed to fetch uploaded audio file for transcription');
+              const errorText = await audioResponse.text();
+              console.error('❌ Failed to fetch uploaded audio file:', audioResponse.status, errorText);
+              this.showError(`Failed to process audio file: ${audioResponse.status}`);
+              return;
             }
           } catch (error) {
-            console.error('Error fetching uploaded audio file:', error);
+            console.error('❌ Error fetching uploaded audio file:', error);
+            this.showError(`Error processing audio file: ${error.message}`);
+            return;
           }
         }
 
